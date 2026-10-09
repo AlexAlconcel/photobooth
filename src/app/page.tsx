@@ -120,22 +120,32 @@ export default function Home() {
   async function exportImage(format: "png" | "jpeg") {
     const canvas = canvasRef.current; if (!canvas) return;
     const width = layout === "horizontal" ? 1600 : layout === "grid" ? 1200 : 800;
-    const height = layout === "horizontal" ? 520 : layout === "grid" ? 1200 : 1320;
-    canvas.width = width; canvas.height = height;
-    const context = canvas.getContext("2d"); if (!context) return;
-    context.fillStyle = selectedTheme.paper; context.fillRect(0, 0, width, height);
-    const pad = 72; const gap = 24; const items = photos.length || needed;
+    const pad = 58; const gap = layout === "grid" ? 29 : 18; const items = photos.length || needed;
     const isGrid = layout === "grid"; const isHorizontal = layout === "horizontal";
     const columns = isGrid ? 2 : isHorizontal ? Math.min(items, 4) : 1;
     const rows = Math.ceil(items / columns); const photoWidth = isGrid ? (width - pad * 2 - gap) / 2 : isHorizontal ? (width - pad * 2 - gap * (columns - 1)) / columns : width - pad * 2;
-    const photoHeight = isGrid ? photoWidth : (height - pad * 2 - gap * (rows - 1) - 120) / rows;
+    const footerHeight = 84;
+    const fixedHeight = layout === "horizontal" ? 520 : layout === "grid" ? 1200 : 1320;
+    const photoHeight = layout === "four" || layout === "three" ? photoWidth * .838 : layout === "single" ? photoWidth / .75 : isGrid ? (fixedHeight - pad * 2 - gap * (rows - 1) - footerHeight) / rows : (fixedHeight - pad * 2 - gap * (rows - 1) - 120) / rows;
+    const height = layout === "four" || layout === "three" || layout === "single" ? pad * 2 + photoHeight * rows + gap * (rows - 1) + footerHeight : fixedHeight;
+    canvas.width = width; canvas.height = height;
+    const context = canvas.getContext("2d"); if (!context) return;
+    context.fillStyle = selectedTheme.paper; context.fillRect(0, 0, width, height);
+    const frameWidth = 20;
+    context.strokeStyle = selectedTheme.color; context.lineWidth = frameWidth; context.strokeRect(frameWidth / 2, frameWidth / 2, width - frameWidth, height - frameWidth);
     const drawOne = async (src: string, x: number, y: number, w: number, h: number, i: number) => {
       context.save(); context.filter = filterCss[filter];
-      if (src) { const image = new Image(); image.src = src; await image.decode(); context.drawImage(image, x, y, w, h); } else { context.fillStyle = selectedTheme.color; context.fillRect(x, y, w, h); }
+      if (src) {
+        const image = new Image(); image.src = src; await image.decode();
+        const sourceRatio = image.width / image.height; const targetRatio = w / h;
+        let sourceX = 0; let sourceY = 0; let sourceWidth = image.width; let sourceHeight = image.height;
+        if (sourceRatio > targetRatio) { sourceWidth = image.height * targetRatio; sourceX = (image.width - sourceWidth) / 2; } else { sourceHeight = image.width / targetRatio; sourceY = (image.height - sourceHeight) / 2; }
+        context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, w, h);
+      } else { context.fillStyle = selectedTheme.color; context.fillRect(x, y, w, h); }
       context.fillStyle = selectedTheme.ink; context.font = "bold 18px sans-serif"; context.fillText(String(i + 1).padStart(2, "0"), x + 16, y + 28); context.restore();
     };
     for (let i = 0; i < items; i++) await drawOne(photos[i] ?? "", pad + (i % columns) * (photoWidth + gap), pad + Math.floor(i / columns) * (photoHeight + gap), photoWidth, photoHeight, i);
-    context.fillStyle = selectedTheme.ink; context.textAlign = "center"; context.font = "24px Georgia"; context.fillText(caption || "", width / 2, height - 52); if (showDate) { context.font = "12px sans-serif"; context.fillText(new Date().toLocaleDateString("en-GB").replaceAll("/", "."), width / 2, height - 25); }
+    context.fillStyle = selectedTheme.ink; context.textAlign = "center"; context.font = "24px Georgia"; context.fillText(caption || "", width / 2, height - 76); if (showDate) { context.font = "12px sans-serif"; context.fillText(new Date().toLocaleDateString("en-GB").replaceAll("/", "."), width / 2, height - 49); }
     const link = document.createElement("a"); link.download = `momo-${Date.now()}.${format}`; link.href = canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", .92); link.click();
   }
 
