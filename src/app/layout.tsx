@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "momo | Photo Booth",
+  title: "SheSmall | Photo Booth",
   description: "A private, browser-based photo booth for little moments.",
 };
 
