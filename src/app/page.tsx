@@ -60,6 +60,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"frame" | "type">("frame");
   const [sampleIndex, setSampleIndex] = useState(0);
   const [flash, setFlash] = useState(false);
+  const [exportPreview, setExportPreview] = useState<{ url: string; fileName: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraWrapRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -70,6 +71,7 @@ export default function Home() {
   const needed = selectedLayout.count;
 
   useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
+  useEffect(() => () => { if (exportPreview) URL.revokeObjectURL(exportPreview.url); }, [exportPreview]);
   useEffect(() => {
     const timer = window.setInterval(() => setSampleIndex((current) => (current + 1) % sampleFormats.length), 4200);
     return () => window.clearInterval(timer);
@@ -150,29 +152,51 @@ export default function Home() {
     for (let i = 0; i < items; i++) await drawOne(photos[i] ?? "", pad + (i % columns) * (photoWidth + gap), pad + Math.floor(i / columns) * (photoHeight + gap), photoWidth, photoHeight, i);
     context.fillStyle = selectedTheme.ink; context.textAlign = "center"; context.textBaseline = "middle"; context.font = "24px Georgia"; context.fillText(caption || "", width / 2, height - 76); if (showDate) { context.font = "12px sans-serif"; context.fillText(new Date().toLocaleDateString("en-GB").replaceAll("/", "."), width / 2, height - 49); }
     
-    // Mobile-friendly download
-    const dataUrl = canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", .92);
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
-    if (isMobile) {
-      // For mobile, open in new tab so user can long-press to save
-      const newTab = window.open();
-      if (newTab) {
-        newTab.document.write(`<html><head><title>SheSmall Photo</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#000;}<img{max-width:100%;height:auto;}</style></head><body><img src="${dataUrl}" alt="Photo strip" /></body></html>`);
-        newTab.document.close();
+    const mimeType = format === "png" ? "image/png" : "image/jpeg";
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, mimeType, format === "jpeg" ? 0.92 : undefined),
+    );
+    if (!blob) return;
+
+    const extension = format === "png" ? "png" : "jpg";
+    const fileName = `shesmall-${Date.now()}.${extension}`;
+    const file = new File([blob], fileName, { type: mimeType });
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "SheSmall Photo" });
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
       }
-    } else {
-      // Desktop download
-      const link = document.createElement("a"); 
-      link.download = `shesmall-${Date.now()}.${format}`; 
-      link.href = dataUrl; 
-      document.body.appendChild(link);
-      link.click(); 
-      document.body.removeChild(link);
     }
+
+    const url = URL.createObjectURL(blob);
+
+    if (isIOS) {
+      setExportPreview({ url, fileName });
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.download = fileName;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  function closeExportPreview() {
+    setExportPreview((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
   }
 
   return <main className={`app-shell theme-${theme}`}>
+    {exportPreview && <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" onClick={closeExportPreview}><div className="export-modal-card" onClick={(event) => event.stopPropagation()}><p id="export-modal-title" className="export-modal-title">Save your photo</p><p className="export-modal-hint">Press and hold the image, then tap <strong>Save to Photos</strong> (or Add to Photos).</p><img src={exportPreview.url} alt="Your photo strip — press and hold to save" className="export-modal-image" /><button type="button" className="primary-button full" onClick={closeExportPreview}>Done</button></div></div>}
     <header className="topbar"><button className="wordmark" onClick={() => setStage("welcome")} aria-label="Return to welcome"><span>SheSmall</span><small>PHOTO BOOTH</small></button><div className="step-info"><span className="step-label">{stage === "welcome" ? "01 / welcome" : stage === "setup" ? "02 / setup" : stage === "capture" ? "03 / capture" : "04 / edit"}</span><span className="step-subtitle">Created by Dino Alex :)</span></div></header>
 
     {stage === "welcome" && <section className="welcome page-enter"><div className="welcome-copy"><p className="eyebrow">A little memory machine</p><button className="primary-button welcome-cta" onClick={() => setStage("setup")}>Enter the booth <span>↗</span></button><h1>Make a moment<br /><em>worth keeping.</em></h1><p className="intro">A quiet, playful photobooth for the people you like most. Take a few frames, make them yours, and keep the whole thing local.</p><p className="microcopy">No account · no uploads · just your camera</p></div><div className="sample-stage"><div className="sample-carousel"><div className="sample-track" style={{ transform: `translateX(-${sampleIndex * 100}%)` }}>{sampleFormats.map((format) => <div className={`sample-slide sample-format-${format.id}`} key={format.id}><div className="sample-strip">{Array.from({ length: format.count }).map((_, index) => <div className={`sample-image sample-${(index % 3) + 1}`} key={index}><span>{String(index + 1).padStart(2, "0")}</span></div>)}<p>shesmall / 2026</p></div><span className="strip-name">{format.name}</span></div>)}</div><div className="carousel-controls"><button aria-label="Previous photo strip" onClick={() => setSampleIndex((sampleIndex + sampleFormats.length - 1) % sampleFormats.length)}>←</button><div className="carousel-dots">{sampleFormats.map((format, index) => <button aria-label={`Show ${format.name} photo strip`} className={sampleIndex === index ? "active" : ""} key={format.id} onClick={() => setSampleIndex(index)} />)}</div><button aria-label="Next photo strip" onClick={() => setSampleIndex((sampleIndex + 1) % sampleFormats.length)}>→</button></div></div><div className="orbit-note note-one">little<br />keepsakes</div><div className="orbit-note note-two">✦ 100% local</div></div></section>}
