@@ -149,7 +149,27 @@ export default function Home() {
     };
     for (let i = 0; i < items; i++) await drawOne(photos[i] ?? "", pad + (i % columns) * (photoWidth + gap), pad + Math.floor(i / columns) * (photoHeight + gap), photoWidth, photoHeight, i);
     context.fillStyle = selectedTheme.ink; context.textAlign = "center"; context.textBaseline = "middle"; context.font = "24px Georgia"; context.fillText(caption || "", width / 2, height - 76); if (showDate) { context.font = "12px sans-serif"; context.fillText(new Date().toLocaleDateString("en-GB").replaceAll("/", "."), width / 2, height - 49); }
-    const link = document.createElement("a"); link.download = `shesmall-${Date.now()}.${format}`; link.href = canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", .92); link.click();
+    
+    // Mobile-friendly download
+    const dataUrl = canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", .92);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+      // For mobile, open in new tab so user can long-press to save
+      const newTab = window.open();
+      if (newTab) {
+        newTab.document.write(`<html><head><title>SheSmall Photo</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#000;}<img{max-width:100%;height:auto;}</style></head><body><img src="${dataUrl}" alt="Photo strip" /></body></html>`);
+        newTab.document.close();
+      }
+    } else {
+      // Desktop download
+      const link = document.createElement("a"); 
+      link.download = `shesmall-${Date.now()}.${format}`; 
+      link.href = dataUrl; 
+      document.body.appendChild(link);
+      link.click(); 
+      document.body.removeChild(link);
+    }
   }
 
   return <main className={`app-shell theme-${theme}`}>
