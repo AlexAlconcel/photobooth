@@ -1055,6 +1055,37 @@ button.shutter > span::after { background: #2f2b28 !important; }
   height: 16px;
   color: #500d20;
 }
+.cta-with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.cta-with-icon .btn-icon {
+  width: 28px;
+  height: 28px;
+  margin-left: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffd7e7;
+  color: #500d20;
+  flex: 0 0 28px;
+}
+.cta-with-icon .btn-icon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+.secondary-button.cta-with-icon .btn-icon {
+  background: #500d20;
+  color: #fff8e7;
+}
+.setup-side .cta-with-icon.full,
+.capture-controls .cta-with-icon,
+.export-area .cta-with-icon {
+  width: 100%;
+}
 .welcome h1,
 .section-heading h2,
 .capture-top h2,
