@@ -17,6 +17,7 @@ import {
   isShareId,
   type StripMeta,
 } from "@/lib/share-id";
+import { qrDataUrlForShareLink } from "@/lib/share-qr-image";
 import { publicSiteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -130,12 +131,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let qrDataUrl = "";
+  try {
+    qrDataUrl = await qrDataUrlForShareLink(shareUrl);
+  } catch {
+    return errorResponse(500, "The share link was saved but the QR code could not be created. Try again.");
+  }
+
   return NextResponse.json({
     ok: true,
     stored: true,
     id,
     sharePath,
     shareUrl,
+    qrDataUrl,
     blobUrl: blobUrl || undefined,
     expiresAt: expiresAt.toISOString(),
     retentionHours: Math.round(SHARE_TTL_MS / (60 * 60 * 1000)),

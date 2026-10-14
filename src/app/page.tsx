@@ -194,6 +194,7 @@ export default function Home() {
   const stripBlobRef = useRef<Blob | null>(null);
   const [stripFileName, setStripFileName] = useState("kixclicks-photo-strip.png");
   const [shareUrl, setShareUrl] = useState("");
+  const [shareQrDataUrl, setShareQrDataUrl] = useState("");
   const [shareExpiresAt, setShareExpiresAt] = useState("");
   const [shareError, setShareError] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
@@ -360,6 +361,7 @@ export default function Home() {
       return "";
     });
     setShareUrl("");
+    setShareQrDataUrl("");
     setShareExpiresAt("");
     setShareError("");
     setShareBusy(false);
@@ -435,6 +437,7 @@ export default function Home() {
     setShareError("");
     setShareBusy(true);
     setShareUrl("");
+    setShareQrDataUrl("");
     setShareExpiresAt("");
     setStage("result");
     const origin = clientShareOrigin();
@@ -465,6 +468,7 @@ export default function Home() {
         sharePath?: string;
         expiresAt?: string;
         blobUrl?: string;
+        qrDataUrl?: string;
       };
       try {
         payload = await response.json();
@@ -483,7 +487,12 @@ export default function Home() {
         setShareError("Set NEXT_PUBLIC_SITE_URL so phones can open the QR link. Download and print still work here.");
         return;
       }
+      if (!payload.qrDataUrl) {
+        setShareError("The strip was saved but the QR image could not be loaded. Tap Try again.");
+        return;
+      }
       setShareUrl(resolvedUrl);
+      setShareQrDataUrl(payload.qrDataUrl);
       setShareExpiresAt(payload.expiresAt || new Date(Date.now() + SHARE_TTL_MS).toISOString());
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -591,6 +600,6 @@ export default function Home() {
 
     {stage === "edit" && <section className="editor page-enter"><div className="editor-heading"><div><p className="eyebrow">Your KixClicks strip</p><h2>Make it yours.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>new session</button></div></div><div className="editor-grid"><div className="preview-column"><div className={`strip-preview layout-${layout}`} style={{ background: selectedTheme.paper, color: selectedTheme.ink, borderColor: selectedTheme.color }}>{Array.from({ length: needed }).map((_, i) => photos[i] ? <img key={i} src={photos[i]} alt={`Captured photo ${i + 1}`} style={{ filter: filterCss[filter] }} /> : <Placeholder key={i} index={i} filter={filter} />)}<div className="preview-footer"><span>{caption}</span>{showDate && <small>{new Date().toLocaleDateString("en-GB").replaceAll("/", ".")}</small>}</div>{stickers.map((sticker) => <button className="placed-sticker" style={{ left: `${sticker.x}%`, top: `${sticker.y}%` }} key={sticker.id} onClick={() => setStickers((current) => current.filter((item) => item.id !== sticker.id))}>{sticker.mark}</button>)}</div><p className="preview-hint">Click a sticker on the preview to remove it.</p></div><div className="editor-panel"><div className="tabs">{(["frame", "type"] as const).map((tab) => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>{activeTab === "frame" && <div className="panel-content"><label className="control-label">Theme</label><div className="theme-grid">{themes.map((item) => <button className={`theme-swatch ${theme === item.id ? "selected" : ""}`} key={item.id} onClick={() => setTheme(item.id)}><span style={{ background: item.paper, borderColor: item.color }} /><small>{item.name}</small></button>)}</div><label className="control-label spaced">Photo filter</label><div className="filter-row">{(Object.keys(filterCss) as Filter[]).map((item) => <button className={filter === item ? "selected" : ""} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div></div>}{activeTab === "type" && <div className="panel-content"><label className="control-label" htmlFor="caption">Caption (max 26 characters)</label><input id="caption" value={caption} maxLength={26} onChange={(event) => setCaption(event.target.value)} placeholder="a tiny caption" /><div className="toggle-row"><span>Show date stamp</span><button className={`toggle ${showDate ? "on" : ""}`} onClick={() => setShowDate(!showDate)} aria-label="Toggle date stamp"><i /></button></div><label className="control-label spaced">Quick captions</label><div className="quick-captions">{["good vibes only", "same moments", "better frames", "kixclicks"].map((text) => <button key={text} onClick={() => setCaption(text)}>{text}</button>)}</div></div>}<div className="export-area"><button className="primary-button full" onClick={finishSession}>QR, download & print <span>↗</span></button><button className="secondary-button full" onClick={() => exportImage("png")}>{isMobileSave ? "Save to Gallery (PNG)" : "Download PNG"}</button><button className="download-link" onClick={() => exportImage("jpeg")}>{isMobileSave ? "or save as JPEG to Gallery" : "or save as JPEG"}</button>{exportError && <p className="soft-note" role="alert">{exportError}</p>}</div></div></div><canvas ref={canvasRef} className="hidden-canvas" /></section>}
 
-    {stage === "result" && <section className="editor result-stage page-enter"><div className="editor-heading"><div><p className="eyebrow">Session complete</p><h2>Scan, save, or print.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>Start New Session</button></div></div><div className="result-grid">{stripPreviewUrl ? <img className="result-strip" src={stripPreviewUrl} alt="Final KixClicks photo strip" /> : <p className="soft-note">Preparing your photo strip…</p>}<div className="result-panel"><div className="result-qr-wrap">{shareUrl ? <ShareQr url={shareUrl} /> : <div className="result-qr result-qr-wait" role="status">{shareBusy ? "Saving strip & preparing QR…" : "QR not ready"}</div>}{shareUrl && <><p className="result-qr-caption">Scan to save your photo strip</p><p className="microcopy">This link expires {shareExpiresAt ? new Date(shareExpiresAt).toLocaleString() : "in 7 days"}. No account is required.</p></>}</div>{shareError && <p className="soft-note" role="alert">{shareError}</p>}{shareError && <button type="button" className="secondary-button full" onClick={finishSession} disabled={shareBusy}>Try again</button>}<div className="result-actions"><button className="primary-button full" onClick={downloadFinishedStrip} disabled={!stripPreviewUrl}>Download Photo Strip</button><button className="secondary-button full" onClick={() => setPrintOpen(true)} disabled={!stripPreviewUrl}>Print Photo Strip</button><button className="secondary-button full" onClick={copyShareLink} disabled={!shareUrl}>Copy Link</button>{copyStatus && <p className="microcopy">{copyStatus}</p>}{shareUrl && <p className="share-url">{shareUrl}</p>}<button className="text-button" onClick={restart}>Start New Session</button></div></div></div></section>}
+    {stage === "result" && <section className="editor result-stage page-enter"><div className="editor-heading"><div><p className="eyebrow">Session complete</p><h2>Scan, save, or print.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>Start New Session</button></div></div><div className="result-grid">{stripPreviewUrl ? <img className="result-strip" src={stripPreviewUrl} alt="Final KixClicks photo strip" /> : <p className="soft-note">Preparing your photo strip…</p>}<div className="result-panel"><div className="result-qr-wrap">{shareQrDataUrl && shareUrl ? <ShareQr url={shareUrl} dataUrl={shareQrDataUrl} /> : <div className="result-qr result-qr-wait" role="status">{shareBusy ? "Saving strip & preparing QR…" : "QR not ready"}</div>}{shareQrDataUrl && shareUrl && <><p className="result-qr-caption">Scan to save your photo strip</p><p className="microcopy">This link expires {shareExpiresAt ? new Date(shareExpiresAt).toLocaleString() : "in 7 days"}. No account is required.</p></>}</div>{shareError && <p className="soft-note" role="alert">{shareError}</p>}{shareError && <button type="button" className="secondary-button full" onClick={finishSession} disabled={shareBusy}>Try again</button>}<div className="result-actions"><button className="primary-button full" onClick={downloadFinishedStrip} disabled={!stripPreviewUrl}>Download Photo Strip</button><button className="secondary-button full" onClick={() => setPrintOpen(true)} disabled={!stripPreviewUrl}>Print Photo Strip</button><button className="secondary-button full" onClick={copyShareLink} disabled={!shareUrl}>Copy Link</button>{copyStatus && <p className="microcopy">{copyStatus}</p>}{shareUrl && <p className="share-url">{shareUrl}</p>}<button className="text-button" onClick={restart}>Start New Session</button></div></div></div></section>}
   </main>;
 }

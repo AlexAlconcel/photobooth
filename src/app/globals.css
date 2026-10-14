@@ -1150,11 +1150,21 @@ button.shutter > span::after { background: #2f2b28 !important; }
 .result-qr-wait {
   display: grid;
   place-items: center;
+  gap: 8px;
   min-height: 280px;
+  padding: 16px;
   color: var(--muted);
   font: 12px/1.4 Arial, sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-align: center;
+}
+.result-qr-wait small {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  word-break: break-all;
+  opacity: 0.7;
 }
 .result-qr-caption {
   text-align: center;
