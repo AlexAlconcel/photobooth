@@ -41,6 +41,58 @@ function Placeholder({ index, filter }: { index: number; filter: Filter }) {
   return <div className="placeholder-photo" style={{ filter: filterCss[filter] }}><span>{String(index + 1).padStart(2, "0")}</span><i>your photo</i></div>;
 }
 
+/** Phones/tablets only — desktop uses direct download / save dialog. */
+function isMobileExportTarget() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/Android|iPhone|iPod/i.test(ua)) return true;
+  if (/iPad/i.test(ua)) return true;
+  if (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform)) return true;
+  return false;
+}
+
+function isIosExportTarget() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform);
+}
+
+async function downloadImageOnDesktop(blob: Blob, fileName: string, mimeType: string) {
+  const extension = fileName.includes(".") ? `.${fileName.split(".").pop()}` : ".png";
+
+  const savePicker = (window as Window & {
+    showSaveFilePicker?: (options: {
+      suggestedName?: string;
+      types?: { description: string; accept: Record<string, string[]> }[];
+    }) => Promise<FileSystemFileHandle>;
+  }).showSaveFilePicker;
+  if (savePicker) {
+    try {
+      const handle = await savePicker({
+        suggestedName: fileName,
+        types: [{ description: "Image", accept: { [mimeType]: [extension] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+}
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("welcome");
   const [layout, setLayout] = useState<LayoutId>("four");
@@ -161,31 +213,35 @@ export default function Home() {
     const extension = format === "png" ? "png" : "jpg";
     const fileName = `shesmall-${Date.now()}.${extension}`;
     const file = new File([blob], fileName, { type: mimeType });
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: "SheSmall Photo" });
-        return;
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") return;
+    if (isMobileExportTarget()) {
+      if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: "SheSmall Photo" });
+          return;
+        } catch (error) {
+          if (error instanceof Error && error.name === "AbortError") return;
+        }
       }
-    }
 
-    const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
 
-    if (isIOS) {
-      setExportPreview({ url, fileName });
+      if (isIosExportTarget()) {
+        setExportPreview({ url, fileName });
+        return;
+      }
+
+      const link = document.createElement("a");
+      link.download = fileName;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
       return;
     }
 
-    const link = document.createElement("a");
-    link.download = fileName;
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+    await downloadImageOnDesktop(blob, fileName, mimeType);
   }
 
   function closeExportPreview() {
