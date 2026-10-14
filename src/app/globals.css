@@ -1167,9 +1167,18 @@ button.shutter > span::after { background: #2f2b28 !important; }
   color: var(--muted);
 }
 .result-actions {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
   margin-top: 22px;
+}
+.result-actions .primary-button,
+.result-actions .secondary-button {
+  width: min(100%, 280px);
+  min-height: 58px;
+  padding: 18px 24px;
+  box-sizing: border-box;
 }
 .copy-stepper {
   display: flex;
