@@ -64,10 +64,64 @@ export function validatePrintCopies(value: string | number) {
 
 export async function waitForImage(image: HTMLImageElement) {
   if (image.complete && image.naturalWidth > 0) return;
+  if (image.complete) throw new Error("The print preview image failed to load.");
   await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error("The print preview image failed to load."));
+    image.addEventListener("load", () => resolve(), { once: true });
+    image.addEventListener("error", () => reject(new Error("The print preview image failed to load.")), { once: true });
   });
+}
+
+function loadPrintImage(image: HTMLImageElement, src: string) {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const succeed = () => {
+      if (settled) return;
+      if (image.naturalWidth <= 0) return;
+      settled = true;
+      resolve();
+    };
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("The print preview image failed to load."));
+    };
+    image.addEventListener("load", succeed, { once: true });
+    image.addEventListener("error", fail, { once: true });
+    image.src = src;
+    if (image.complete) {
+      if (image.naturalWidth > 0) succeed();
+      else fail();
+    }
+  });
+}
+
+async function openPrintFrame() {
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.setAttribute("title", "KixClicks print preview");
+  frame.style.position = "fixed";
+  frame.style.left = "0";
+  frame.style.top = "0";
+  frame.style.width = "800px";
+  frame.style.height = "1200px";
+  frame.style.opacity = "0";
+  frame.style.pointerEvents = "none";
+  frame.style.border = "0";
+  frame.style.zIndex = "-1";
+
+  document.body.appendChild(frame);
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+
+  const doc = frame.contentDocument;
+  if (!doc?.documentElement) {
+    frame.remove();
+    throw new Error("The print frame could not be created.");
+  }
+  if (!doc.head) doc.documentElement.appendChild(doc.createElement("head"));
+  if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));
+  return { frame, doc };
 }
 
 export const browserPrintAdapter: PrinterAdapter = {
@@ -98,63 +152,61 @@ export const browserPrintAdapter: PrinterAdapter = {
     }
 
     const preset = job.paperPreset ?? "fit";
-    const frame = document.createElement("iframe");
-    frame.setAttribute("aria-hidden", "true");
-    frame.style.position = "fixed";
-    frame.style.right = "0";
-    frame.style.bottom = "0";
-    frame.style.width = "0";
-    frame.style.height = "0";
-    frame.style.border = "0";
-    document.body.appendChild(frame);
-
-    const doc = frame.contentDocument;
-    if (!doc) {
-      frame.remove();
-      return { submitted: false, message: "The print frame could not be created." };
-    }
-
-    const pages = Array.from({ length: copies.copies }, (_, index) =>
-      `<div class="print-copy"><img ${index === 0 ? 'id="strip" ' : ""}alt="KixClicks photo strip" /></div>`,
-    ).join("");
-
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head><title>KixClicks print</title>
-<style>
-  ${pageRule(preset)}
-  html, body { margin: 0; padding: 0; background: #fff; }
-  body { margin: 0; }
-  .print-copy { page-break-after: always; display: flex; justify-content: center; align-items: flex-start; }
-  .print-copy:last-child { page-break-after: auto; }
-  img {
-    max-width: 100%;
-    max-height: calc(100vh - 16mm);
-    width: auto;
-    height: auto;
-    object-fit: contain;
-    display: block;
-  }
-</style></head><body>${pages}</body></html>`);
-    doc.close();
-
-    const image = doc.getElementById("strip");
-    if (!(image instanceof HTMLImageElement)) {
-      frame.remove();
-      return { submitted: false, message: "The print preview image was missing." };
+    let frame: HTMLIFrameElement;
+    let doc: Document;
+    try {
+      ({ frame, doc } = await openPrintFrame());
+    } catch (error) {
+      return { submitted: false, message: error instanceof Error ? error.message : "The print frame could not be created." };
     }
 
     try {
-      for (const item of Array.from(doc.images)) item.src = src;
-      await waitForImage(image);
-      const extras = Array.from(doc.images).filter((item) => item !== image);
-      await Promise.all(extras.map((item) => waitForImage(item).catch(() => undefined)));
+      doc.title = "KixClicks print";
+      const style = doc.createElement("style");
+      style.textContent = `
+        ${pageRule(preset)}
+        html, body { margin: 0; padding: 0; background: #fff; }
+        .print-copy { page-break-after: always; break-after: page; display: flex; justify-content: center; align-items: flex-start; }
+        .print-copy:last-child { page-break-after: auto; break-after: auto; }
+        img {
+          max-width: 100%;
+          max-height: calc(100vh - 16mm);
+          width: auto;
+          height: auto;
+          object-fit: contain;
+          display: block;
+        }
+      `;
+      doc.head.appendChild(style);
+
+      const images: HTMLImageElement[] = [];
+      for (let index = 0; index < copies.copies; index += 1) {
+        const wrap = doc.createElement("div");
+        wrap.className = "print-copy";
+        const image = doc.createElement("img");
+        image.alt = "KixClicks photo strip";
+        wrap.appendChild(image);
+        doc.body.appendChild(wrap);
+        images.push(image);
+      }
+
+      const first = images[0];
+      if (!first) {
+        frame.remove();
+        return { submitted: false, message: "The print preview image was missing." };
+      }
+
+      await Promise.all(images.map((image) => loadPrintImage(image, src)));
+
       await new Promise<void>((resolve) => {
         const finish = () => {
           window.removeEventListener("focus", finish);
+          frame.contentWindow?.removeEventListener("afterprint", finish);
           frame.remove();
           resolve();
         };
         window.addEventListener("focus", finish, { once: true });
+        frame.contentWindow?.addEventListener("afterprint", finish, { once: true });
         frame.contentWindow?.focus();
         frame.contentWindow?.print();
         window.setTimeout(finish, 120_000);
