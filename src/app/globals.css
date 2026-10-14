@@ -898,12 +898,3 @@ button.shutter > span::after { background: #2f2b28 !important; }
   border: 0 !important;
   overflow: hidden !important;
 }
-
-.countdown-overlay--pose span {
-  animation: countdown-pop 0.9s ease both;
-}
-
-.countdown-overlay--pose small {
-  margin-top: 12px;
-  letter-spacing: 0.18em;
-}
