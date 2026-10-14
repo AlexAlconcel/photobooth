@@ -187,7 +187,7 @@ button.shutter > span::after { background: #2f2b28 !important; }
 
   .capture-preview-side {
     width: 100%;
-    justify-items: stretch;
+    justify-items: center;
   }
 
   .capture-preview-side .capture-strip-preview {
@@ -702,6 +702,9 @@ button.shutter > span::after { background: #2f2b28 !important; }
 
   .capture-controls .capture-preview-side {
     order: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
     width: 100%;
     max-width: min(100%, 360px);
     margin: 0 auto 22px !important;
@@ -725,7 +728,11 @@ button.shutter > span::after { background: #2f2b28 !important; }
   .capture-preview-side .capture-strip-preview.layout-four,
   .capture-preview-side .capture-strip-preview.layout-single {
     width: min(100%, 168px) !important;
+    max-width: min(100%, 168px) !important;
+    flex: 0 0 auto !important;
+    align-self: center !important;
     margin-inline: auto !important;
+    justify-self: center !important;
   }
 
   .capture-preview-side .capture-strip-preview.layout-grid {
@@ -774,5 +781,16 @@ button.shutter > span::after { background: #2f2b28 !important; }
 
   .capture-preview-side .capture-strip-preview {
     margin-inline: auto;
+  }
+}
+
+/* Capture: vertical strip previews (3 / 4 / single) — keep centered on phones */
+@media (max-width: 760px) {
+  .capture-stage .capture-controls .capture-preview-side > .capture-strip-preview.layout-three,
+  .capture-stage .capture-controls .capture-preview-side > .capture-strip-preview.layout-four,
+  .capture-stage .capture-controls .capture-preview-side > .capture-strip-preview.layout-single {
+    align-self: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
 }
