@@ -1,9 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { Playfair_Display } from "next/font/google";
 import "./globals.css";
 
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-display",
+});
+
 export const metadata: Metadata = {
-  title: "SheSmall | Photo Booth",
-  description: "A private, browser-based photo booth for little moments.",
+  title: "KixClicks | Photobooth",
+  description: "Same moments, better frames. A private, browser-based photobooth.",
 };
 
 export const viewport: Viewport = {
@@ -14,6 +20,6 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en"><body>{children}</body></html>
+    <html lang="en" className={playfair.variable}><body>{children}</body></html>
   );
 }
