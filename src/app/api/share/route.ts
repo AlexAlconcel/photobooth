@@ -1,5 +1,12 @@
 import { put } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  blobSdkOptions,
+  blobStorageSetupMessage,
+  hasBlobStorageConfigured,
+  requiresBlobForShare,
+} from "@/lib/blob-auth";
+import { formatBlobUploadError } from "@/lib/blob-errors";
 import { pruneMemoryStrips, saveMemoryStrip } from "@/lib/memory-store";
 import {
   ALLOWED_SHARE_TYPES,
@@ -10,7 +17,6 @@ import {
   isShareId,
   type StripMeta,
 } from "@/lib/share-id";
-import { hasBlobToken, requiresBlobForShare } from "@/lib/share-storage";
 import { publicSiteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -21,14 +27,11 @@ function errorResponse(status: number, error: string, extra?: Record<string, unk
 }
 
 export async function POST(request: NextRequest) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
   const origin = publicSiteOrigin(request);
+  const blobOptions = blobSdkOptions();
 
-  if (requiresBlobForShare() && !hasBlobToken()) {
-    return errorResponse(
-      503,
-      "Photo sharing is not set up on this site yet. In the Vercel project, create a Blob store and redeploy so BLOB_READ_WRITE_TOKEN is available.",
-    );
+  if (requiresBlobForShare() && !hasBlobStorageConfigured()) {
+    return errorResponse(503, blobStorageSetupMessage());
   }
 
   let form: FormData;
@@ -57,54 +60,75 @@ export async function POST(request: NextRequest) {
   const contentType = file.type === "image/jpeg" ? "image/jpeg" : "image/png";
   const extension = contentType === "image/jpeg" ? "jpg" : "png";
   const fileName = `kixclicks-photo-strip.${extension}`;
-  const meta: StripMeta = {
-    id,
-    createdAt: createdAt.toISOString(),
-    expiresAt: expiresAt.toISOString(),
-    contentType,
-    fileName,
-  };
 
   const buffer = Buffer.from(await file.arrayBuffer());
   pruneMemoryStrips();
-  saveMemoryStrip(id, buffer, meta);
 
   let stored = false;
-  if (token) {
+  let blobUrl = "";
+
+  if (hasBlobStorageConfigured()) {
     try {
-      await Promise.all([
-        put(blobPathForStrip(id, contentType), buffer, {
-          access: "public",
-          token,
-          addRandomSuffix: false,
-          contentType,
-          cacheControlMaxAge: Math.round(SHARE_TTL_MS / 1000),
-        }),
-        put(blobPathForMeta(id), JSON.stringify(meta), {
-          access: "public",
-          token,
-          addRandomSuffix: false,
-          contentType: "application/json",
-          cacheControlMaxAge: Math.round(SHARE_TTL_MS / 1000),
-        }),
-      ]);
+      const cacheControlMaxAge = Math.round(SHARE_TTL_MS / 1000);
+      const stripPut = await put(blobPathForStrip(id, contentType), buffer, {
+        access: "public",
+        addRandomSuffix: false,
+        contentType,
+        cacheControlMaxAge,
+        ...blobOptions,
+      });
+      if (!stripPut.url) {
+        return errorResponse(500, "Upload finished but the storage URL was missing. Try again.");
+      }
+      blobUrl = stripPut.url;
+
+      const meta: StripMeta = {
+        id,
+        createdAt: createdAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        contentType,
+        fileName,
+        blobUrl,
+      };
+
+      await put(blobPathForMeta(id), JSON.stringify(meta), {
+        access: "public",
+        addRandomSuffix: false,
+        contentType: "application/json",
+        cacheControlMaxAge,
+        ...blobOptions,
+      });
+
+      saveMemoryStrip(id, buffer, meta);
       stored = true;
-    } catch {
-      return errorResponse(
-        500,
-        "The photo strip could not be saved to cloud storage. Check the Vercel Blob store and try again.",
-      );
+    } catch (error) {
+      return errorResponse(500, formatBlobUploadError(error));
     }
   } else {
+    const meta: StripMeta = {
+      id,
+      createdAt: createdAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      contentType,
+      fileName,
+    };
+    saveMemoryStrip(id, buffer, meta);
     stored = !requiresBlobForShare();
   }
 
   if (!stored) {
-    return errorResponse(503, "Photo sharing storage is not available.");
+    return errorResponse(503, blobStorageSetupMessage());
   }
 
   const sharePath = `/s/${id}`;
   const shareUrl = origin ? `${origin}${sharePath}` : "";
+
+  if (!shareUrl) {
+    return errorResponse(
+      503,
+      "Set NEXT_PUBLIC_SITE_URL to your public site (for example https://kixclicks.vercel.app) so QR codes open on guest phones.",
+    );
+  }
 
   return NextResponse.json({
     ok: true,
@@ -112,8 +136,9 @@ export async function POST(request: NextRequest) {
     id,
     sharePath,
     shareUrl,
-    expiresAt: meta.expiresAt,
+    blobUrl: blobUrl || undefined,
+    expiresAt: expiresAt.toISOString(),
     retentionHours: Math.round(SHARE_TTL_MS / (60 * 60 * 1000)),
-    qrReady: Boolean(shareUrl),
+    qrReady: true,
   });
 }

@@ -458,11 +458,13 @@ export default function Home() {
       const response = await fetch("/api/share", { method: "POST", body, signal: controller.signal });
       let payload: {
         ok?: boolean;
+        stored?: boolean;
         error?: string;
         id?: string;
         shareUrl?: string;
         sharePath?: string;
         expiresAt?: string;
+        blobUrl?: string;
       };
       try {
         payload = await response.json();
@@ -470,11 +472,13 @@ export default function Home() {
         setShareError("The sharing service did not respond. Download and print still work on this device.");
         return;
       }
-      if (!response.ok || !payload.ok || !payload.id) {
+      if (!response.ok || !payload.ok || !payload.id || payload.stored === false) {
         setShareError(payload.error || "The photo strip could not be uploaded for QR sharing.");
         return;
       }
-      const resolvedUrl = payload.shareUrl || (origin ? `${origin}/s/${payload.id}` : "");
+      const resolvedUrl =
+        payload.shareUrl ||
+        (payload.id && origin ? `${origin}/s/${payload.id}` : "");
       if (!resolvedUrl) {
         setShareError("Set NEXT_PUBLIC_SITE_URL so phones can open the QR link. Download and print still work here.");
         return;

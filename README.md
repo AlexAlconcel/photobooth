@@ -41,12 +41,12 @@ After editing a strip, use **QR, download & print**.
 
 ### Storage (required for guest QR scans)
 
-1. In the Vercel project, create a **Blob** store.
-2. Copy the read/write token into `BLOB_READ_WRITE_TOKEN` (server only).
+1. In the Vercel project, connect your **Blob** store (Storage → your store → connect to this project).
+2. Vercel adds `BLOB_STORE_ID` and uses **OIDC** (`VERCEL_OIDC_TOKEN` at runtime). You do **not** need a manual `BLOB_READ_WRITE_TOKEN` on Vercel when OIDC is enabled.
 3. Set `NEXT_PUBLIC_SITE_URL` to `https://kixclicks.vercel.app` so QR codes never encode localhost.
-4. Copy `.env.example` to `.env.local` for local development.
+4. For local sharing tests: `vercel link` and `vercel env pull` (or use `BLOB_READ_WRITE_TOKEN` in `.env.local`).
 
-Shared strips are stored as PNG/JPEG objects with unguessable UUIDs. Links expire after **7 days**. Opening an expired link returns an expired state and attempts to delete the stored files. Camera frames stay in browser memory until a session is finished.
+Server uploads use `@vercel/blob` with `BLOB_STORE_ID` + OIDC. The booth only shows a QR after a successful `put` to Blob. Shared strips use unguessable UUID paths under `kixclicks/` and expire after **7 days**.
 
 Without Blob on Vercel, guest QR links cannot work (each request runs on a different server). Download and print still work on the booth computer; the result screen shows a clear error instead of a scannable QR.
 

@@ -27,6 +27,8 @@ export type StripMeta = {
   expiresAt: string;
   contentType: string;
   fileName: string;
+  /** Public blob URL after a successful put (used to verify storage). */
+  blobUrl?: string;
 };
 
 export function isExpired(expiresAt: string, now = Date.now()) {

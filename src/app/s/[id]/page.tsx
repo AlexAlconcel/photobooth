@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { hasBlobStorageConfigured } from "@/lib/blob-auth";
 import { loadLiveStrip } from "@/lib/blob-store";
 import { readMemoryStrip } from "@/lib/memory-store";
 import { isShareId } from "@/lib/share-id";
@@ -13,10 +14,9 @@ type PageProps = { params: Promise<{ id: string }> };
 
 async function loadStrip(id: string) {
   if (!isShareId(id)) return { status: "invalid" as const };
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (token) {
+  if (hasBlobStorageConfigured()) {
     try {
-      const result = await loadLiveStrip(id, token);
+      const result = await loadLiveStrip(id);
       if (result.status === "ok") {
         return { status: "ok" as const, fileName: result.meta.fileName, expiresAt: result.meta.expiresAt };
       }
@@ -30,7 +30,7 @@ async function loadStrip(id: string) {
     return { status: "ok" as const, fileName: memory.meta.fileName, expiresAt: memory.meta.expiresAt };
   }
   if (memory.status === "expired") return { status: "expired" as const };
-  return { status: token ? "unavailable" as const : "unconfigured" as const };
+  return { status: hasBlobStorageConfigured() ? "unavailable" as const : "unconfigured" as const };
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -69,7 +69,7 @@ export default async function SharePage({ params }: PageProps) {
         {result.status === "unconfigured" && (
           <ShareState
             title="This strip was not saved to the cloud."
-            body="The booth showed a QR code before cloud storage was connected. Ask the operator to add a Vercel Blob store to the project, redeploy, then start a new session on the booth."
+            body="Cloud storage is not available on this deployment. Connect the Blob store to the Vercel project (OIDC uses BLOB_STORE_ID), redeploy, then start a new booth session."
           />
         )}
       </section>

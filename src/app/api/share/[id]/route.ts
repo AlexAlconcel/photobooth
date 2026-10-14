@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasBlobStorageConfigured } from "@/lib/blob-auth";
 import { loadLiveStrip } from "@/lib/blob-store";
 import { readMemoryStrip } from "@/lib/memory-store";
 import { isShareId } from "@/lib/share-id";
@@ -18,20 +19,24 @@ function imageResponse(body: BodyInit, contentType: string, fileName: string) {
 export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   if (!isShareId(id)) {
-    return NextResponse.json({ error: "invalid" }, { status: 400 });
+    return NextResponse.json({ error: "invalid", message: "This share link is not valid." }, { status: 400 });
   }
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (token) {
+  if (hasBlobStorageConfigured()) {
     try {
-      const result = await loadLiveStrip(id, token);
+      const result = await loadLiveStrip(id);
       if (result.status === "ok") {
         const image = await fetch(result.image.url, { cache: "no-store" });
         if (image.ok && image.body) {
           return imageResponse(image.body, result.meta.contentType, result.meta.fileName);
         }
-      } else if (result.status === "expired") {
-        return NextResponse.json({ error: "expired" }, { status: 410 });
+        return NextResponse.json(
+          { error: "unavailable", message: "The photo strip file could not be loaded from storage." },
+          { status: 502 },
+        );
+      }
+      if (result.status === "expired") {
+        return NextResponse.json({ error: "expired", message: "This share link has expired." }, { status: 410 });
       }
     } catch {
       // Fall through to the in-memory copy from this server instance.
@@ -40,12 +45,20 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
 
   const memory = readMemoryStrip(id);
   if (memory.status === "expired") {
-    return NextResponse.json({ error: "expired" }, { status: 410 });
+    return NextResponse.json({ error: "expired", message: "This share link has expired." }, { status: 410 });
   }
   if (memory.status === "ok") {
     const bytes = new Uint8Array(memory.bytes);
     return imageResponse(bytes, memory.meta.contentType, memory.meta.fileName);
   }
 
-  return NextResponse.json({ error: token ? "unavailable" : "storage_unconfigured" }, { status: token ? 404 : 503 });
+  return NextResponse.json(
+    {
+      error: hasBlobStorageConfigured() ? "unavailable" : "storage_unconfigured",
+      message: hasBlobStorageConfigured()
+        ? "This photo strip was not found. It may still be uploading, or the booth session failed to save."
+        : "Cloud storage is not configured for this deployment.",
+    },
+    { status: hasBlobStorageConfigured() ? 404 : 503 },
+  );
 }

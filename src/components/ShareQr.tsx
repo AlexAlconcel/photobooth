@@ -9,8 +9,11 @@ export function ShareQr({ url }: { url: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    setSrc("");
-    setError("");
+    const frame = requestAnimationFrame(() => {
+      if (cancelled) return;
+      setSrc("");
+      setError("");
+    });
     QRCode.toDataURL(url, {
       errorCorrectionLevel: "H",
       margin: 4,
@@ -25,6 +28,7 @@ export function ShareQr({ url }: { url: string }) {
       });
     return () => {
       cancelled = true;
+      cancelAnimationFrame(frame);
     };
   }, [url]);
 
