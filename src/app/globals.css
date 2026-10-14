@@ -884,3 +884,26 @@ button.shutter > span::after { background: #2f2b28 !important; }
   padding-bottom: max(18px, env(safe-area-inset-bottom)) !important;
   gap: clamp(10px, 2vmin, 18px) !important;
 }
+
+.camera-wrap.is-busy .camera-shutter,
+.camera-shutter.is-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
+.countdown-overlay--pose span {
+  animation: countdown-pop 0.9s ease both;
+}
+
+.countdown-overlay--pose small {
+  margin-top: 12px;
+  letter-spacing: 0.18em;
+}
