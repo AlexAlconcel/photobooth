@@ -119,28 +119,8 @@ async function tryShareToGallery(file: File) {
   }
 }
 
-/**
- * Save to Photos/Gallery/Pictures when the OS allows it.
- * Returns `ios_fallback` when iOS needs the in-app share sheet button.
- */
-async function savePhotoStrip(blob: Blob, fileName: string, mimeType: string) {
-  const file = new File([blob], fileName, { type: mimeType });
-  const mobile = isMobileExportTarget();
-
-  if (mobile) {
-    const shareResult = await tryShareToGallery(file);
-    if (shareResult === "shared" || shareResult === "cancelled") return shareResult === "shared" ? "done" : "cancelled";
-
-    const pickerResult = await trySaveToPicturesFolder(blob, fileName, mimeType);
-    if (pickerResult === "saved") return "done";
-    if (pickerResult === "cancelled") return "cancelled";
-
-    if (isIosExportTarget()) return "ios_fallback";
-
-    triggerBrowserDownload(blob, fileName);
-    return "done";
-  }
-
+/** Laptop/desktop — save dialog (Pictures) or download. */
+async function savePhotoStripDesktop(blob: Blob, fileName: string, mimeType: string) {
   const pickerResult = await trySaveToPicturesFolder(blob, fileName, mimeType);
   if (pickerResult === "saved") return "done";
   if (pickerResult === "cancelled") return "cancelled";
@@ -169,6 +149,8 @@ export default function Home() {
   const [sampleIndex, setSampleIndex] = useState(0);
   const [flash, setFlash] = useState(false);
   const [exportPreview, setExportPreview] = useState<{ url: string; fileName: string } | null>(null);
+  const [isMobileSave, setIsMobileSave] = useState(false);
+  const [isIosSave, setIsIosSave] = useState(false);
   const pendingExportRef = useRef<{ blob: Blob; fileName: string; mimeType: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraWrapRef = useRef<HTMLDivElement>(null);
@@ -184,6 +166,10 @@ export default function Home() {
   useEffect(() => {
     const timer = window.setInterval(() => setSampleIndex((current) => (current + 1) % sampleFormats.length), 4200);
     return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    setIsMobileSave(isMobileExportTarget());
+    setIsIosSave(isIosExportTarget());
   }, []);
 
   async function startCamera() {
@@ -270,20 +256,41 @@ export default function Home() {
     const extension = format === "png" ? "png" : "jpg";
     const fileName = `shesmall-${Date.now()}.${extension}`;
 
-    const result = await savePhotoStrip(blob, fileName, mimeType);
-    if (result === "cancelled") return;
-    if (result === "ios_fallback") {
+    if (isMobileExportTarget()) {
       pendingExportRef.current = { blob, fileName, mimeType };
       setExportPreview({ url: URL.createObjectURL(blob), fileName });
+      return;
     }
+
+    const result = await savePhotoStripDesktop(blob, fileName, mimeType);
+    if (result === "cancelled") return;
   }
 
-  async function shareExportToPhotos() {
+  /** Must run from a button tap — phones require a fresh user gesture to open Gallery/Photos. */
+  async function saveMobileToGallery() {
     const pending = pendingExportRef.current;
     if (!pending) return;
-    const file = new File([pending.blob], pending.fileName, { type: pending.mimeType });
+
+    const file = new File([pending.blob], pending.fileName, {
+      type: pending.mimeType,
+      lastModified: Date.now(),
+    });
+
     const shareResult = await tryShareToGallery(file);
-    if (shareResult === "shared") closeExportPreview();
+    if (shareResult === "shared") {
+      closeExportPreview();
+      return;
+    }
+    if (shareResult === "cancelled") return;
+
+    const pickerResult = await trySaveToPicturesFolder(pending.blob, pending.fileName, pending.mimeType);
+    if (pickerResult === "saved") {
+      closeExportPreview();
+      return;
+    }
+    if (pickerResult === "cancelled") return;
+
+    triggerBrowserDownload(pending.blob, pending.fileName);
   }
 
   function closeExportPreview() {
@@ -295,7 +302,7 @@ export default function Home() {
   }
 
   return <main className={`app-shell theme-${theme}`}>
-    {exportPreview && <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" onClick={closeExportPreview}><div className="export-modal-card" onClick={(event) => event.stopPropagation()}><p id="export-modal-title" className="export-modal-title">Save to your Photos</p><p className="export-modal-hint">Tap the button below, then choose <strong>Save to Photos</strong> or <strong>Add to Photos</strong> in the share menu.</p><img src={exportPreview.url} alt="Your photo strip" className="export-modal-image" /><div className="export-modal-actions"><button type="button" className="primary-button full" onClick={shareExportToPhotos}>Save to Photos</button><button type="button" className="secondary-button full" onClick={closeExportPreview}>Done</button></div><p className="export-modal-alt">Or press and hold the image above, then tap Save to Photos.</p></div></div>}
+    {exportPreview && <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" onClick={closeExportPreview}><div className="export-modal-card" onClick={(event) => event.stopPropagation()}><p id="export-modal-title" className="export-modal-title">Save to your gallery</p><p className="export-modal-hint">{isIosSave ? <>Tap <strong>Save to Gallery</strong> below. Your iPhone will open the share menu — choose <strong>Save to Photos</strong> or <strong>Add to Photos</strong>. That is how iOS lets websites save into your library.</> : <>Tap <strong>Save to Gallery</strong> below. Your phone will open a system menu — pick <strong>Photos</strong>, <strong>Gallery</strong>, or <strong>Save to device</strong> and allow access if asked.</>}</p><img src={exportPreview.url} alt="Your photo strip" className="export-modal-image" /><div className="export-modal-actions"><button type="button" className="primary-button full" onClick={saveMobileToGallery}>Save to Gallery</button><button type="button" className="secondary-button full" onClick={closeExportPreview}>Not now</button></div><p className="export-modal-alt">{isIosSave ? "Tip: you can also press and hold the image, then tap Save to Photos." : "If no menu appears, try Chrome and tap Save to Gallery again."}</p></div></div>}
     <header className="topbar"><button className="wordmark" onClick={() => setStage("welcome")} aria-label="Return to welcome"><span>SheSmall</span><small>PHOTO BOOTH</small></button><div className="step-info"><span className="step-label">{stage === "welcome" ? "01 / welcome" : stage === "setup" ? "02 / setup" : stage === "capture" ? "03 / capture" : "04 / edit"}</span><span className="step-subtitle">Created by Dino Alex :)</span></div></header>
 
     {stage === "welcome" && <section className="welcome page-enter"><div className="welcome-copy"><p className="eyebrow">A little memory machine</p><button className="primary-button welcome-cta" onClick={() => setStage("setup")}>Enter the booth <span>↗</span></button><h1>Make a moment<br /><em>worth keeping.</em></h1><p className="intro">A quiet, playful photobooth for the people you like most. Take a few frames, make them yours, and keep the whole thing local.</p><p className="microcopy">No account · no uploads · just your camera</p></div><div className="sample-stage"><div className="sample-carousel"><div className="sample-track" style={{ transform: `translateX(-${sampleIndex * 100}%)` }}>{sampleFormats.map((format) => <div className={`sample-slide sample-format-${format.id}`} key={format.id}><div className="sample-strip">{Array.from({ length: format.count }).map((_, index) => <div className={`sample-image sample-${(index % 3) + 1}`} key={index}><span>{String(index + 1).padStart(2, "0")}</span></div>)}<p>shesmall / 2026</p></div><span className="strip-name">{format.name}</span></div>)}</div><div className="carousel-controls"><button aria-label="Previous photo strip" onClick={() => setSampleIndex((sampleIndex + sampleFormats.length - 1) % sampleFormats.length)}>←</button><div className="carousel-dots">{sampleFormats.map((format, index) => <button aria-label={`Show ${format.name} photo strip`} className={sampleIndex === index ? "active" : ""} key={format.id} onClick={() => setSampleIndex(index)} />)}</div><button aria-label="Next photo strip" onClick={() => setSampleIndex((sampleIndex + 1) % sampleFormats.length)}>→</button></div></div><div className="orbit-note note-one">little<br />keepsakes</div><div className="orbit-note note-two">✦ 100% local</div></div></section>}
@@ -304,6 +311,6 @@ export default function Home() {
 
     {stage === "capture" && <section className="capture-stage page-enter"><div className="capture-top"><div><p className="eyebrow">{selectedLayout.name}</p><h2>Find your light.</h2></div><button className="text-button" onClick={restart} disabled={isCapturing}>restart session</button></div><div className="capture-grid"><div className="camera-wrap" ref={cameraWrapRef}>{cameraError ? <div className="camera-error"><span>◌</span><p>{cameraError}</p><button className="secondary-button" onClick={beginEditing}>Continue to editor</button></div> : <><video ref={videoRef} className="camera-video" style={{ transform: mirrorCamera ? "scaleX(-1)" : "none" }} playsInline muted /><div className={`flash ${flash ? "active" : ""}`} />{countdownValue !== null && <div className="countdown-overlay"><span>{countdownValue}</span><small>get ready</small></div>}</>}<div className="camera-top-controls"><button className={`option-button ${mirrorCamera ? "active" : ""}`} onClick={() => setMirrorCamera(!mirrorCamera)} aria-pressed={mirrorCamera}>↔ mirror {mirrorCamera ? "on" : "off"}</button><button className="option-button" onClick={toggleFullscreen}>⛶ fullscreen</button></div><div className="camera-meta"><span>{photos.length} / {needed} captured</span><span>{isCapturing ? "hold still" : `countdown set to ${countdown}s`}</span></div></div><div className="capture-controls"><div className="capture-preview-side"><div className={`capture-strip-preview layout-${layout}`}>{Array.from({ length: needed }).map((_, i) => <div className={`capture-strip-slot ${retakeIndex === i ? "selected" : ""}`} key={i}>{photos[i] ? <img src={photos[i]} alt={`Captured photo ${i + 1}`} style={{ filter: filterCss[filter] }} /> : <span>photo {i + 1}</span>}</div>)}<small>shesmall / preview</small></div><div className="photo-dots">{Array.from({ length: needed }).map((_, i) => <button type="button" key={i} className={`${i < photos.length ? "filled" : ""} ${retakeIndex === i ? "selected" : ""}`} onClick={() => photos[i] !== undefined && setRetakeIndex(i)} disabled={isCapturing || photos[i] === undefined} aria-label={`Retake photo ${i + 1}`}>{photos[i] ? <img src={photos[i]} alt="" /> : <span>{i + 1}</span>}</button>)}</div></div><button className="shutter" onClick={() => capturePhoto(retakeIndex ?? undefined)} disabled={isCapturing || photos.length >= needed && retakeIndex === null} aria-label={retakeIndex === null ? "Start automatic photo timer" : "Retake selected photo"}><span /></button><p>{isCapturing ? "capturing your strip" : retakeIndex === null ? `tap once to start ${countdown}s countdown` : "tap shutter to retake selected photo"}</p>{photos.length > 0 && <button className="secondary-button" onClick={beginEditing}>{photos.length >= needed ? "Edit my photo strip" : "Edit what I have"} ↗</button>}</div></div></section>}
 
-    {stage === "edit" && <section className="editor page-enter"><div className="editor-heading"><div><p className="eyebrow">Your little keepsake</p><h2>Make it yours.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>new session</button></div></div><div className="editor-grid"><div className="preview-column"><div className={`strip-preview layout-${layout}`} style={{ background: selectedTheme.paper, color: selectedTheme.ink, borderColor: selectedTheme.color }}>{Array.from({ length: needed }).map((_, i) => photos[i] ? <img key={i} src={photos[i]} alt={`Captured photo ${i + 1}`} style={{ filter: filterCss[filter] }} /> : <Placeholder key={i} index={i} filter={filter} />)}<div className="preview-footer"><span>{caption}</span>{showDate && <small>{new Date().toLocaleDateString("en-GB").replaceAll("/", ".")}</small>}</div>{stickers.map((sticker) => <button className="placed-sticker" style={{ left: `${sticker.x}%`, top: `${sticker.y}%` }} key={sticker.id} onClick={() => setStickers((current) => current.filter((item) => item.id !== sticker.id))}>{sticker.mark}</button>)}</div><p className="preview-hint">Click a sticker on the preview to remove it.</p></div><div className="editor-panel"><div className="tabs">{(["frame", "type"] as const).map((tab) => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>{activeTab === "frame" && <div className="panel-content"><label className="control-label">Theme</label><div className="theme-grid">{themes.map((item) => <button className={`theme-swatch ${theme === item.id ? "selected" : ""}`} key={item.id} onClick={() => setTheme(item.id)}><span style={{ background: item.paper, borderColor: item.color }} /><small>{item.name}</small></button>)}</div><label className="control-label spaced">Photo filter</label><div className="filter-row">{(Object.keys(filterCss) as Filter[]).map((item) => <button className={filter === item ? "selected" : ""} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div></div>}{activeTab === "type" && <div className="panel-content"><label className="control-label" htmlFor="caption">Caption (max 26 characters)</label><input id="caption" value={caption} maxLength={26} onChange={(event) => setCaption(event.target.value)} placeholder="a tiny caption" /><div className="toggle-row"><span>Show date stamp</span><button className={`toggle ${showDate ? "on" : ""}`} onClick={() => setShowDate(!showDate)} aria-label="Toggle date stamp"><i /></button></div><label className="control-label spaced">Quick captions</label><div className="quick-captions">{["made with friends", "good times only", "see you soon", "stay soft"].map((text) => <button key={text} onClick={() => setCaption(text)}>{text}</button>)}</div></div>}<div className="export-area"><button className="primary-button full" onClick={() => exportImage("png")}>Download PNG <span>↓</span></button><button className="download-link" onClick={() => exportImage("jpeg")}>or save as JPEG</button></div></div></div><canvas ref={canvasRef} className="hidden-canvas" /></section>}
+    {stage === "edit" && <section className="editor page-enter"><div className="editor-heading"><div><p className="eyebrow">Your little keepsake</p><h2>Make it yours.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>new session</button></div></div><div className="editor-grid"><div className="preview-column"><div className={`strip-preview layout-${layout}`} style={{ background: selectedTheme.paper, color: selectedTheme.ink, borderColor: selectedTheme.color }}>{Array.from({ length: needed }).map((_, i) => photos[i] ? <img key={i} src={photos[i]} alt={`Captured photo ${i + 1}`} style={{ filter: filterCss[filter] }} /> : <Placeholder key={i} index={i} filter={filter} />)}<div className="preview-footer"><span>{caption}</span>{showDate && <small>{new Date().toLocaleDateString("en-GB").replaceAll("/", ".")}</small>}</div>{stickers.map((sticker) => <button className="placed-sticker" style={{ left: `${sticker.x}%`, top: `${sticker.y}%` }} key={sticker.id} onClick={() => setStickers((current) => current.filter((item) => item.id !== sticker.id))}>{sticker.mark}</button>)}</div><p className="preview-hint">Click a sticker on the preview to remove it.</p></div><div className="editor-panel"><div className="tabs">{(["frame", "type"] as const).map((tab) => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>{activeTab === "frame" && <div className="panel-content"><label className="control-label">Theme</label><div className="theme-grid">{themes.map((item) => <button className={`theme-swatch ${theme === item.id ? "selected" : ""}`} key={item.id} onClick={() => setTheme(item.id)}><span style={{ background: item.paper, borderColor: item.color }} /><small>{item.name}</small></button>)}</div><label className="control-label spaced">Photo filter</label><div className="filter-row">{(Object.keys(filterCss) as Filter[]).map((item) => <button className={filter === item ? "selected" : ""} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div></div>}{activeTab === "type" && <div className="panel-content"><label className="control-label" htmlFor="caption">Caption (max 26 characters)</label><input id="caption" value={caption} maxLength={26} onChange={(event) => setCaption(event.target.value)} placeholder="a tiny caption" /><div className="toggle-row"><span>Show date stamp</span><button className={`toggle ${showDate ? "on" : ""}`} onClick={() => setShowDate(!showDate)} aria-label="Toggle date stamp"><i /></button></div><label className="control-label spaced">Quick captions</label><div className="quick-captions">{["made with friends", "good times only", "see you soon", "stay soft"].map((text) => <button key={text} onClick={() => setCaption(text)}>{text}</button>)}</div></div>}<div className="export-area"><button className="primary-button full" onClick={() => exportImage("png")}>{isMobileSave ? "Save to Gallery (PNG)" : "Download PNG"} <span>{isMobileSave ? "↗" : "↓"}</span></button><button className="download-link" onClick={() => exportImage("jpeg")}>{isMobileSave ? "or save as JPEG to Gallery" : "or save as JPEG"}</button></div></div></div><canvas ref={canvasRef} className="hidden-canvas" /></section>}
   </main>;
 }
