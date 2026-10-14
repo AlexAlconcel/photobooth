@@ -18,6 +18,7 @@ import {
   type StripMeta,
 } from "@/lib/share-id";
 import { qrDataUrlForShareLink } from "@/lib/share-qr-image";
+import { registryRecordFromUpload, writeShareRegistry } from "@/lib/share-registry";
 import { publicSiteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -82,6 +83,8 @@ export async function POST(request: NextRequest) {
         return errorResponse(500, "Upload finished but the storage URL was missing. Try again.");
       }
       blobUrl = stripPut.url;
+      const imagePathname = blobPathForStrip(id, contentType);
+      const metaPathname = blobPathForMeta(id);
 
       const meta: StripMeta = {
         id,
@@ -92,13 +95,24 @@ export async function POST(request: NextRequest) {
         blobUrl,
       };
 
-      await put(blobPathForMeta(id), JSON.stringify(meta), {
+      await put(metaPathname, JSON.stringify(meta), {
         access: "public",
         addRandomSuffix: false,
         contentType: "application/json",
         cacheControlMaxAge,
         ...blobOptions,
       });
+
+      await writeShareRegistry(
+        registryRecordFromUpload({
+          id,
+          blobUrl,
+          createdAt: meta.createdAt,
+          expiresAt: meta.expiresAt,
+          imagePathname,
+          metaPathname,
+        }),
+      );
 
       saveMemoryStrip(id, buffer, meta);
       stored = true;

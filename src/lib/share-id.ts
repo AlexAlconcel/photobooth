@@ -21,6 +21,12 @@ export function blobPathForMeta(id: string) {
   return `kixclicks/${id}.json`;
 }
 
+export function blobPathForRegistry(id: string) {
+  return `kixclicks/registry/${id}.json`;
+}
+
+export const SHARE_REGISTRY_PREFIX = "kixclicks/registry/";
+
 export type StripMeta = {
   id: string;
   createdAt: string;
@@ -29,6 +35,19 @@ export type StripMeta = {
   fileName: string;
   /** Public blob URL after a successful put (used to verify storage). */
   blobUrl?: string;
+};
+
+/** Persistent cleanup index stored in Blob (one object per shared strip). */
+export type ShareRegistryRecord = {
+  id: string;
+  blobUrl: string;
+  expiresAt: string;
+  createdAt: string;
+  imagePathname: string;
+  metaPathname: string;
+  registryPathname: string;
+  cleanupAttempts?: number;
+  lastCleanupErrorAt?: string;
 };
 
 export function isExpired(expiresAt: string, now = Date.now()) {

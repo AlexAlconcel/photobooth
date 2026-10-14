@@ -2,6 +2,7 @@ import { del, list, type ListBlobResultBlob } from "@vercel/blob";
 import { blobSdkOptions } from "./blob-auth";
 import {
   blobPathForMeta,
+  blobPathForRegistry,
   blobStripPathCandidates,
   isExpired,
   type StripMeta,
@@ -22,7 +23,10 @@ export async function readStoredMeta(metaBlob: ListBlobResultBlob): Promise<Stri
 }
 
 export async function deleteStoredStrip(id: string) {
-  await del([...blobStripPathCandidates(id), blobPathForMeta(id)], blobSdkOptions()).catch(() => undefined);
+  await del(
+    [...blobStripPathCandidates(id), blobPathForMeta(id), blobPathForRegistry(id)],
+    blobSdkOptions(),
+  ).catch(() => undefined);
 }
 
 export async function loadLiveStrip(id: string) {

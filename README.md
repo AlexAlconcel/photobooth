@@ -46,7 +46,13 @@ After editing a strip, use **QR, download & print**.
 3. Set `NEXT_PUBLIC_SITE_URL` to `https://kixclicks.vercel.app` so QR codes never encode localhost.
 4. For local sharing tests: `vercel link` and `vercel env pull` (or use `BLOB_READ_WRITE_TOKEN` in `.env.local`).
 
-Server uploads use `@vercel/blob` with `BLOB_STORE_ID` + OIDC. The booth only shows a QR after a successful `put` to Blob. Shared strips use unguessable UUID paths under `kixclicks/` and expire after **7 days**.
+Server uploads use `@vercel/blob` with `BLOB_STORE_ID` + OIDC. The booth only shows a QR after a successful `put` to Blob. Shared strips use unguessable UUID paths under `kixclicks/` and expire after **7 days**. Each upload also writes a registry record at `kixclicks/registry/<uuid>.json` (blob URL + expiry) for automated cleanup.
+
+Expired links are rejected immediately when opened (`isExpired` on read). A Vercel Cron job (`vercel.json` → `/api/cron/cleanup-shares` at **03:00 UTC** daily) deletes expired strip files, meta JSON, and registry records using the same Blob SDK + OIDC auth.
+
+Set **`CRON_SECRET`** in the Vercel project (long random string). Vercel Cron calls the route with `Authorization: Bearer <CRON_SECRET>`. The secret is server-only.
+
+**Cron plan limits (Vercel):** Hobby allows up to **100** cron jobs per project but each job may run **at most once per day**; timing is approximate within the scheduled UTC hour. Pro/Enterprise can run as often as **once per minute** with tighter scheduling. Cron runs on **production** deployments only.
 
 Without Blob on Vercel, guest QR links cannot work (each request runs on a different server). Download and print still work on the booth computer; the result screen shows a clear error instead of a scannable QR.
 
