@@ -899,6 +899,66 @@ button.shutter > span::after { background: #2f2b28 !important; }
   text-shadow: 0 4px 20px rgb(0 0 0 / 45%);
 }
 
+.countdown-overlay--complete {
+  z-index: 6;
+  padding: clamp(20px, 5vw, 32px);
+  background: rgb(20 18 17 / 72%);
+}
+
+.countdown-overlay--complete .capture-complete-title {
+  margin: 0 0 12px;
+  font: 400 clamp(26px, 6vw, 38px) / 1.15 Georgia, serif;
+  letter-spacing: -0.03em;
+  text-align: center;
+}
+
+.countdown-overlay--complete .capture-complete-message {
+  margin: 0;
+  max-width: 18rem;
+  font: 13px / 1.55 Arial, sans-serif;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: none;
+  color: #fffaf4;
+}
+
+.capture-complete-banner {
+  width: 100%;
+  max-width: 22rem;
+  margin: 16px auto 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8f2eb;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.capture-complete-banner strong {
+  display: block;
+  margin-bottom: 6px;
+  font: 11px Arial, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.capture-complete-banner p {
+  margin: 0;
+  font: 13px / 1.55 Arial, sans-serif;
+  color: var(--muted);
+}
+
+.capture-controls .capture-edit-cta {
+  width: 100%;
+  max-width: 22rem;
+  margin-top: 14px;
+}
+
+.capture-controls-hint {
+  text-align: center;
+}
+
 .camera-wrap.is-busy .camera-shutter,
 .camera-shutter.is-hidden {
   display: none !important;
