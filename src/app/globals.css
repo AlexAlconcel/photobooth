@@ -128,6 +128,8 @@ button.shutter > span::after { background: #2f2b28 !important; }
 .export-modal-title { margin: 0 0 8px; font: 600 20px/1.2 Georgia, serif; text-align: center; }
 .export-modal-hint { margin: 0 0 14px; font: 14px/1.45 sans-serif; text-align: center; color: #5c524c; }
 .export-modal-image { display: block; width: 100%; height: auto; margin: 0 0 16px; border-radius: 10px; box-shadow: 0 10px 28px rgb(0 0 0 / 18%); -webkit-touch-callout: default; user-select: auto; }
+.export-modal-actions { display: grid; gap: 10px; margin-bottom: 10px; }
+.export-modal-alt { margin: 0; font: 10px Arial, sans-serif; color: #5c524c; text-align: center; line-height: 1.45; }
 
 /* Phones & tablets — layout containment and touch-friendly spacing */
 .workspace,

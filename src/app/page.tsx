@@ -58,30 +58,20 @@ function isIosExportTarget() {
   return navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform);
 }
 
-async function downloadImageOnDesktop(blob: Blob, fileName: string, mimeType: string) {
-  const extension = fileName.includes(".") ? `.${fileName.split(".").pop()}` : ".png";
+type SavePickerWindow = Window & {
+  showSaveFilePicker?: (options: {
+    suggestedName?: string;
+    startIn?: "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos";
+    id?: string;
+    types?: { description: string; accept: Record<string, string[]> }[];
+  }) => Promise<FileSystemFileHandle>;
+};
 
-  const savePicker = (window as Window & {
-    showSaveFilePicker?: (options: {
-      suggestedName?: string;
-      types?: { description: string; accept: Record<string, string[]> }[];
-    }) => Promise<FileSystemFileHandle>;
-  }).showSaveFilePicker;
-  if (savePicker) {
-    try {
-      const handle = await savePicker({
-        suggestedName: fileName,
-        types: [{ description: "Image", accept: { [mimeType]: [extension] } }],
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-    }
-  }
+function getSaveFilePicker() {
+  return (window as SavePickerWindow).showSaveFilePicker;
+}
 
+function triggerBrowserDownload(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -91,6 +81,72 @@ async function downloadImageOnDesktop(blob: Blob, fileName: string, mimeType: st
   link.click();
   document.body.removeChild(link);
   window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+}
+
+/** Opens the system save UI starting in Pictures (when the browser supports it). */
+async function trySaveToPicturesFolder(blob: Blob, fileName: string, mimeType: string) {
+  const savePicker = getSaveFilePicker();
+  if (!savePicker) return "unavailable";
+
+  const extension = fileName.includes(".") ? `.${fileName.split(".").pop()}` : ".png";
+  try {
+    const handle = await savePicker({
+      suggestedName: fileName,
+      startIn: "pictures",
+      id: "shesmall-photostrip",
+      types: [{ description: "Image", accept: { [mimeType]: [extension] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return "saved";
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
+    return "unavailable";
+  }
+}
+
+async function tryShareToGallery(file: File) {
+  if (typeof navigator.share !== "function" || !navigator.canShare?.({ files: [file] })) {
+    return "unavailable";
+  }
+  try {
+    await navigator.share({ files: [file], title: "SheSmall Photo" });
+    return "shared";
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") return "cancelled";
+    return "unavailable";
+  }
+}
+
+/**
+ * Save to Photos/Gallery/Pictures when the OS allows it.
+ * Returns `ios_fallback` when iOS needs the in-app share sheet button.
+ */
+async function savePhotoStrip(blob: Blob, fileName: string, mimeType: string) {
+  const file = new File([blob], fileName, { type: mimeType });
+  const mobile = isMobileExportTarget();
+
+  if (mobile) {
+    const shareResult = await tryShareToGallery(file);
+    if (shareResult === "shared" || shareResult === "cancelled") return shareResult === "shared" ? "done" : "cancelled";
+
+    const pickerResult = await trySaveToPicturesFolder(blob, fileName, mimeType);
+    if (pickerResult === "saved") return "done";
+    if (pickerResult === "cancelled") return "cancelled";
+
+    if (isIosExportTarget()) return "ios_fallback";
+
+    triggerBrowserDownload(blob, fileName);
+    return "done";
+  }
+
+  const pickerResult = await trySaveToPicturesFolder(blob, fileName, mimeType);
+  if (pickerResult === "saved") return "done";
+  if (pickerResult === "cancelled") return "cancelled";
+
+  triggerBrowserDownload(blob, fileName);
+  return "done";
 }
 
 export default function Home() {
@@ -113,6 +169,7 @@ export default function Home() {
   const [sampleIndex, setSampleIndex] = useState(0);
   const [flash, setFlash] = useState(false);
   const [exportPreview, setExportPreview] = useState<{ url: string; fileName: string } | null>(null);
+  const pendingExportRef = useRef<{ blob: Blob; fileName: string; mimeType: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraWrapRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -212,39 +269,25 @@ export default function Home() {
 
     const extension = format === "png" ? "png" : "jpg";
     const fileName = `shesmall-${Date.now()}.${extension}`;
-    const file = new File([blob], fileName, { type: mimeType });
 
-    if (isMobileExportTarget()) {
-      if (typeof navigator.share === "function" && navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: "SheSmall Photo" });
-          return;
-        } catch (error) {
-          if (error instanceof Error && error.name === "AbortError") return;
-        }
-      }
-
-      const url = URL.createObjectURL(blob);
-
-      if (isIosExportTarget()) {
-        setExportPreview({ url, fileName });
-        return;
-      }
-
-      const link = document.createElement("a");
-      link.download = fileName;
-      link.href = url;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
-      return;
+    const result = await savePhotoStrip(blob, fileName, mimeType);
+    if (result === "cancelled") return;
+    if (result === "ios_fallback") {
+      pendingExportRef.current = { blob, fileName, mimeType };
+      setExportPreview({ url: URL.createObjectURL(blob), fileName });
     }
+  }
 
-    await downloadImageOnDesktop(blob, fileName, mimeType);
+  async function shareExportToPhotos() {
+    const pending = pendingExportRef.current;
+    if (!pending) return;
+    const file = new File([pending.blob], pending.fileName, { type: pending.mimeType });
+    const shareResult = await tryShareToGallery(file);
+    if (shareResult === "shared") closeExportPreview();
   }
 
   function closeExportPreview() {
+    pendingExportRef.current = null;
     setExportPreview((current) => {
       if (current) URL.revokeObjectURL(current.url);
       return null;
@@ -252,7 +295,7 @@ export default function Home() {
   }
 
   return <main className={`app-shell theme-${theme}`}>
-    {exportPreview && <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" onClick={closeExportPreview}><div className="export-modal-card" onClick={(event) => event.stopPropagation()}><p id="export-modal-title" className="export-modal-title">Save your photo</p><p className="export-modal-hint">Press and hold the image, then tap <strong>Save to Photos</strong> (or Add to Photos).</p><img src={exportPreview.url} alt="Your photo strip — press and hold to save" className="export-modal-image" /><button type="button" className="primary-button full" onClick={closeExportPreview}>Done</button></div></div>}
+    {exportPreview && <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" onClick={closeExportPreview}><div className="export-modal-card" onClick={(event) => event.stopPropagation()}><p id="export-modal-title" className="export-modal-title">Save to your Photos</p><p className="export-modal-hint">Tap the button below, then choose <strong>Save to Photos</strong> or <strong>Add to Photos</strong> in the share menu.</p><img src={exportPreview.url} alt="Your photo strip" className="export-modal-image" /><div className="export-modal-actions"><button type="button" className="primary-button full" onClick={shareExportToPhotos}>Save to Photos</button><button type="button" className="secondary-button full" onClick={closeExportPreview}>Done</button></div><p className="export-modal-alt">Or press and hold the image above, then tap Save to Photos.</p></div></div>}
     <header className="topbar"><button className="wordmark" onClick={() => setStage("welcome")} aria-label="Return to welcome"><span>SheSmall</span><small>PHOTO BOOTH</small></button><div className="step-info"><span className="step-label">{stage === "welcome" ? "01 / welcome" : stage === "setup" ? "02 / setup" : stage === "capture" ? "03 / capture" : "04 / edit"}</span><span className="step-subtitle">Created by Dino Alex :)</span></div></header>
 
     {stage === "welcome" && <section className="welcome page-enter"><div className="welcome-copy"><p className="eyebrow">A little memory machine</p><button className="primary-button welcome-cta" onClick={() => setStage("setup")}>Enter the booth <span>↗</span></button><h1>Make a moment<br /><em>worth keeping.</em></h1><p className="intro">A quiet, playful photobooth for the people you like most. Take a few frames, make them yours, and keep the whole thing local.</p><p className="microcopy">No account · no uploads · just your camera</p></div><div className="sample-stage"><div className="sample-carousel"><div className="sample-track" style={{ transform: `translateX(-${sampleIndex * 100}%)` }}>{sampleFormats.map((format) => <div className={`sample-slide sample-format-${format.id}`} key={format.id}><div className="sample-strip">{Array.from({ length: format.count }).map((_, index) => <div className={`sample-image sample-${(index % 3) + 1}`} key={index}><span>{String(index + 1).padStart(2, "0")}</span></div>)}<p>shesmall / 2026</p></div><span className="strip-name">{format.name}</span></div>)}</div><div className="carousel-controls"><button aria-label="Previous photo strip" onClick={() => setSampleIndex((sampleIndex + sampleFormats.length - 1) % sampleFormats.length)}>←</button><div className="carousel-dots">{sampleFormats.map((format, index) => <button aria-label={`Show ${format.name} photo strip`} className={sampleIndex === index ? "active" : ""} key={format.id} onClick={() => setSampleIndex(index)} />)}</div><button aria-label="Next photo strip" onClick={() => setSampleIndex((sampleIndex + 1) % sampleFormats.length)}>→</button></div></div><div className="orbit-note note-one">little<br />keepsakes</div><div className="orbit-note note-two">✦ 100% local</div></div></section>}
