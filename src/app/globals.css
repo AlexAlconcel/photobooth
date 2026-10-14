@@ -655,3 +655,124 @@ button.shutter > span::after { background: #2f2b28 !important; }
     font-size: clamp(18px, 5vw, 28px);
   }
 }
+
+/* Capture stage — phone layout: breathing room + centered strip preview */
+@media (max-width: 760px) {
+  .capture-stage {
+    padding: 40px 20px max(56px, calc(48px + env(safe-area-inset-bottom))) !important;
+  }
+
+  .capture-grid {
+    gap: 22px !important;
+    margin-top: 20px !important;
+  }
+
+  .camera-wrap {
+    min-height: 0 !important;
+    max-height: min(42vh, 320px);
+    aspect-ratio: 4 / 3;
+    width: 100%;
+    margin-bottom: 4px;
+  }
+
+  .capture-controls {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100%;
+    max-width: 100%;
+    gap: 0;
+    padding-top: 12px;
+  }
+
+  .capture-controls > p {
+    order: 1 !important;
+    margin: 0 0 18px !important;
+    padding: 0 16px;
+    max-width: 22rem;
+    line-height: 1.55;
+    letter-spacing: 0.12em;
+  }
+
+  .capture-controls .shutter {
+    order: 2 !important;
+    margin: 0 0 28px !important;
+    flex-shrink: 0;
+  }
+
+  .capture-controls .capture-preview-side {
+    order: 3 !important;
+    width: 100%;
+    max-width: min(100%, 360px);
+    margin: 0 auto 22px !important;
+    justify-items: center;
+    gap: 18px;
+    padding-inline: 8px;
+    box-sizing: border-box;
+  }
+
+  .capture-controls .secondary-button {
+    order: 4 !important;
+    margin: 8px 0 0 !important;
+  }
+
+  .capture-preview-side .capture-strip-preview {
+    margin-inline: auto !important;
+    max-width: 100%;
+  }
+
+  .capture-preview-side .capture-strip-preview.layout-three,
+  .capture-preview-side .capture-strip-preview.layout-four,
+  .capture-preview-side .capture-strip-preview.layout-single {
+    width: min(100%, 168px) !important;
+    margin-inline: auto !important;
+  }
+
+  .capture-preview-side .capture-strip-preview.layout-grid {
+    width: min(100%, 240px) !important;
+    margin-inline: auto !important;
+  }
+
+  .capture-preview-side .capture-strip-preview.layout-horizontal {
+    width: 100% !important;
+    max-width: 340px !important;
+    margin-inline: auto !important;
+  }
+
+  .capture-preview-side .photo-dots {
+    width: 100%;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 2px;
+    margin-bottom: 0;
+    padding-bottom: 4px;
+  }
+
+  .capture-preview-side .photo-dots::before {
+    margin-bottom: 8px;
+    line-height: 1.45;
+    padding-inline: 8px;
+  }
+
+  .capture-preview-side .photo-dots button {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1024px) {
+  .capture-controls {
+    align-items: center;
+    gap: 8px;
+  }
+
+  .capture-preview-side {
+    width: 100%;
+    justify-items: center;
+    margin-inline: auto;
+  }
+
+  .capture-preview-side .capture-strip-preview {
+    margin-inline: auto;
+  }
+}
