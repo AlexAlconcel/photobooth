@@ -885,6 +885,19 @@ button.shutter > span::after { background: #2f2b28 !important; }
   gap: clamp(10px, 2vmin, 18px) !important;
 }
 
+.countdown-overlay--pose-prep {
+  padding: 24px;
+}
+
+.countdown-overlay--pose-prep .pose-prep-message {
+  margin: 0;
+  max-width: 16rem;
+  font: 400 clamp(22px, 5.5vw, 32px) / 1.35 Georgia, serif;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-shadow: 0 4px 20px rgb(0 0 0 / 45%);
+}
+
 .camera-wrap.is-busy .camera-shutter,
 .camera-shutter.is-hidden {
   display: none !important;
