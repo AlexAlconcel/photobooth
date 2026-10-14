@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
-const POSE_BREAK_SECONDS = 2;
+const POSE_BREAK_SECONDS_MIN = 3;
+const POSE_BREAK_SECONDS_MAX = 5;
 const FLASH_MS = 280;
 
 type Stage = "welcome" | "setup" | "capture" | "edit";
@@ -244,7 +245,10 @@ export default function Home() {
     };
 
     const waitPoseBreak = async () => {
-      for (let remaining = POSE_BREAK_SECONDS; remaining > 0; remaining--) {
+      const breakSeconds =
+        POSE_BREAK_SECONDS_MIN +
+        Math.floor(Math.random() * (POSE_BREAK_SECONDS_MAX - POSE_BREAK_SECONDS_MIN + 1));
+      for (let remaining = breakSeconds; remaining > 0; remaining--) {
         flushSync(() => setPoseBreakValue(remaining));
         await sleep(1000);
       }
