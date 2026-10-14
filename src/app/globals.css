@@ -886,6 +886,7 @@ button.shutter > span::after { background: #2f2b28 !important; }
 }
 
 .countdown-overlay--pose-prep {
+  z-index: 6;
   padding: 24px;
 }
 
