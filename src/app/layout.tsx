@@ -10,6 +10,9 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "KixClicks | Photobooth",
   description: "Same moments, better frames. A private, browser-based photobooth.",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export const viewport: Viewport = {
