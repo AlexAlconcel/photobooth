@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { PrintDialog } from "@/components/PrintDialog";
+import { ShareQr, clientShareOrigin } from "@/components/ShareQr";
 import { composePhotoStrip, filterCss } from "@/lib/compose-strip";
+import { SHARE_TTL_MS } from "@/lib/share-id";
 
 const POSE_BREAK_MS = 5000;
 const FLASH_MS = 280;
@@ -193,7 +195,6 @@ export default function Home() {
   const [stripFileName, setStripFileName] = useState("kixclicks-photo-strip.png");
   const [shareUrl, setShareUrl] = useState("");
   const [shareExpiresAt, setShareExpiresAt] = useState("");
-  const [qrDataUrl, setQrDataUrl] = useState("");
   const [shareError, setShareError] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
@@ -360,7 +361,6 @@ export default function Home() {
     });
     setShareUrl("");
     setShareExpiresAt("");
-    setQrDataUrl("");
     setShareError("");
     setShareBusy(false);
     setPrintOpen(false);
@@ -434,9 +434,18 @@ export default function Home() {
   async function finishSession() {
     setShareError("");
     setShareBusy(true);
-    setShareUrl("");
-    setQrDataUrl("");
     setStage("result");
+    const origin = clientShareOrigin();
+    const shareId = crypto.randomUUID();
+    const immediateUrl = origin ? `${origin}/s/${shareId}` : "";
+    if (immediateUrl) {
+      setShareUrl(immediateUrl);
+      setShareExpiresAt(new Date(Date.now() + SHARE_TTL_MS).toISOString());
+    } else {
+      setShareUrl("");
+    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20000);
     try {
       const composed = await buildCurrentStrip("png");
       stripBlobRef.current = composed.blob;
@@ -446,16 +455,19 @@ export default function Home() {
         return URL.createObjectURL(composed.blob);
       });
 
+      const shareBlob =
+        composed.blob.size > 1_800_000 ? (await buildCurrentStrip("jpeg")).blob : composed.blob;
       const body = new FormData();
-      body.set("file", composed.blob, composed.fileName);
-      const response = await fetch("/api/share", { method: "POST", body });
+      body.set("id", shareId);
+      body.set("file", shareBlob, shareBlob.type === "image/jpeg" ? "kixclicks-photo-strip.jpg" : composed.fileName);
+      const response = await fetch("/api/share", { method: "POST", body, signal: controller.signal });
       let payload: {
         ok?: boolean;
         error?: string;
+        id?: string;
         shareUrl?: string;
+        sharePath?: string;
         expiresAt?: string;
-        qrReady?: boolean;
-        code?: string;
       };
       try {
         payload = await response.json();
@@ -463,27 +475,25 @@ export default function Home() {
         setShareError("The sharing service did not respond. Download and print still work on this device.");
         return;
       }
-      if (!response.ok || !payload.ok) {
+      if (!response.ok || !payload.ok || !payload.id) {
         setShareError(payload.error || "The photo strip could not be uploaded for QR sharing.");
         return;
       }
-      if (!payload.shareUrl || !payload.qrReady) {
-        setShareError("Set NEXT_PUBLIC_SITE_URL to https://kixclicks.vercel.app so the QR code can be scanned on another phone. Download and print still work on this device.");
+      const resolvedUrl = payload.shareUrl || immediateUrl || (origin ? `${origin}/s/${payload.id}` : "");
+      if (!resolvedUrl) {
+        setShareError("Set NEXT_PUBLIC_SITE_URL so phones can open the QR link. Download and print still work here.");
         return;
       }
-      const QRCode = (await import("qrcode")).default;
-      const qr = await QRCode.toDataURL(payload.shareUrl, {
-        errorCorrectionLevel: "H",
-        margin: 4,
-        width: 320,
-        color: { dark: "#500d20", light: "#ffffff" },
-      });
-      setShareUrl(payload.shareUrl);
-      setShareExpiresAt(payload.expiresAt || "");
-      setQrDataUrl(qr);
+      setShareUrl(resolvedUrl);
+      setShareExpiresAt(payload.expiresAt || new Date(Date.now() + SHARE_TTL_MS).toISOString());
     } catch (error) {
-      setShareError(error instanceof Error ? error.message : "The photo strip could not be prepared.");
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setShareError("Sharing took too long. Check your connection, then tap Try again.");
+      } else {
+        setShareError(error instanceof Error ? error.message : "The photo strip could not be prepared.");
+      }
     } finally {
+      window.clearTimeout(timeout);
       setShareBusy(false);
     }
   }
@@ -582,6 +592,6 @@ export default function Home() {
 
     {stage === "edit" && <section className="editor page-enter"><div className="editor-heading"><div><p className="eyebrow">Your KixClicks strip</p><h2>Make it yours.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>new session</button></div></div><div className="editor-grid"><div className="preview-column"><div className={`strip-preview layout-${layout}`} style={{ background: selectedTheme.paper, color: selectedTheme.ink, borderColor: selectedTheme.color }}>{Array.from({ length: needed }).map((_, i) => photos[i] ? <img key={i} src={photos[i]} alt={`Captured photo ${i + 1}`} style={{ filter: filterCss[filter] }} /> : <Placeholder key={i} index={i} filter={filter} />)}<div className="preview-footer"><span>{caption}</span>{showDate && <small>{new Date().toLocaleDateString("en-GB").replaceAll("/", ".")}</small>}</div>{stickers.map((sticker) => <button className="placed-sticker" style={{ left: `${sticker.x}%`, top: `${sticker.y}%` }} key={sticker.id} onClick={() => setStickers((current) => current.filter((item) => item.id !== sticker.id))}>{sticker.mark}</button>)}</div><p className="preview-hint">Click a sticker on the preview to remove it.</p></div><div className="editor-panel"><div className="tabs">{(["frame", "type"] as const).map((tab) => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>{activeTab === "frame" && <div className="panel-content"><label className="control-label">Theme</label><div className="theme-grid">{themes.map((item) => <button className={`theme-swatch ${theme === item.id ? "selected" : ""}`} key={item.id} onClick={() => setTheme(item.id)}><span style={{ background: item.paper, borderColor: item.color }} /><small>{item.name}</small></button>)}</div><label className="control-label spaced">Photo filter</label><div className="filter-row">{(Object.keys(filterCss) as Filter[]).map((item) => <button className={filter === item ? "selected" : ""} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div></div>}{activeTab === "type" && <div className="panel-content"><label className="control-label" htmlFor="caption">Caption (max 26 characters)</label><input id="caption" value={caption} maxLength={26} onChange={(event) => setCaption(event.target.value)} placeholder="a tiny caption" /><div className="toggle-row"><span>Show date stamp</span><button className={`toggle ${showDate ? "on" : ""}`} onClick={() => setShowDate(!showDate)} aria-label="Toggle date stamp"><i /></button></div><label className="control-label spaced">Quick captions</label><div className="quick-captions">{["good vibes only", "same moments", "better frames", "kixclicks"].map((text) => <button key={text} onClick={() => setCaption(text)}>{text}</button>)}</div></div>}<div className="export-area"><button className="primary-button full" onClick={finishSession}>QR, download & print <span>↗</span></button><button className="secondary-button full" onClick={() => exportImage("png")}>{isMobileSave ? "Save to Gallery (PNG)" : "Download PNG"}</button><button className="download-link" onClick={() => exportImage("jpeg")}>{isMobileSave ? "or save as JPEG to Gallery" : "or save as JPEG"}</button>{exportError && <p className="soft-note" role="alert">{exportError}</p>}</div></div></div><canvas ref={canvasRef} className="hidden-canvas" /></section>}
 
-    {stage === "result" && <section className="editor result-stage page-enter"><div className="editor-heading"><div><p className="eyebrow">Session complete</p><h2>Scan, save, or print.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>Start New Session</button></div></div><div className="result-grid">{stripPreviewUrl ? <img className="result-strip" src={stripPreviewUrl} alt="Final KixClicks photo strip" /> : <p className="soft-note">Preparing your photo strip…</p>}<div className="result-panel">{shareBusy && <p className="soft-note" role="status">Uploading your strip for a shareable QR code…</p>}{qrDataUrl ? <><img className="result-qr" src={qrDataUrl} alt="QR code to save the photo strip" /><p className="result-qr-caption">Scan to save your photo strip</p><p className="microcopy">This link expires {shareExpiresAt ? new Date(shareExpiresAt).toLocaleString() : "in 7 days"}. No account is required.</p></> : !shareBusy && <p className="soft-note" role="alert">{shareError || "The QR code is not ready yet."}</p>}{shareError && qrDataUrl && <p className="soft-note" role="alert">{shareError}</p>}<div className="result-actions"><button className="primary-button full" onClick={downloadFinishedStrip} disabled={!stripPreviewUrl}>Download Photo Strip</button><button className="secondary-button full" onClick={() => setPrintOpen(true)} disabled={!stripPreviewUrl}>Print Photo Strip</button><button className="secondary-button full" onClick={copyShareLink} disabled={!shareUrl}>Copy Link</button>{copyStatus && <p className="microcopy">{copyStatus}</p>}{shareUrl && <p className="share-url">{shareUrl}</p>}<button className="text-button" onClick={restart}>Start New Session</button></div></div></div></section>}
+    {stage === "result" && <section className="editor result-stage page-enter"><div className="editor-heading"><div><p className="eyebrow">Session complete</p><h2>Scan, save, or print.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>Start New Session</button></div></div><div className="result-grid">{stripPreviewUrl ? <img className="result-strip" src={stripPreviewUrl} alt="Final KixClicks photo strip" /> : <p className="soft-note">Preparing your photo strip…</p>}<div className="result-panel"><div className="result-qr-wrap">{shareUrl ? <ShareQr url={shareUrl} /> : <div className="result-qr result-qr-wait" role="status">{shareBusy ? "Preparing QR…" : "QR not ready"}</div>}{shareUrl && <><p className="result-qr-caption">Scan to save your photo strip</p><p className="microcopy">{shareBusy ? "The QR is ready. We are still saving the strip so the link opens on a phone." : `This link expires ${shareExpiresAt ? new Date(shareExpiresAt).toLocaleString() : "in 7 days"}. No account is required.`}</p></>}</div>{shareError && <p className="soft-note" role="alert">{shareError}</p>}{shareError && <button type="button" className="secondary-button full" onClick={finishSession} disabled={shareBusy}>Try again</button>}<div className="result-actions"><button className="primary-button full" onClick={downloadFinishedStrip} disabled={!stripPreviewUrl}>Download Photo Strip</button><button className="secondary-button full" onClick={() => setPrintOpen(true)} disabled={!stripPreviewUrl}>Print Photo Strip</button><button className="secondary-button full" onClick={copyShareLink} disabled={!shareUrl}>Copy Link</button>{copyStatus && <p className="microcopy">{copyStatus}</p>}{shareUrl && <p className="share-url">{shareUrl}</p>}<button className="text-button" onClick={restart}>Start New Session</button></div></div></div></section>}
   </main>;
 }

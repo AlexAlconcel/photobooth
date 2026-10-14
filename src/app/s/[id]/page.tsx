@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { loadLiveStrip } from "@/lib/blob-store";
+import { readMemoryStrip } from "@/lib/memory-store";
 import { isShareId } from "@/lib/share-id";
 import { ShareDownload } from "./share-download";
+import { SharePending } from "./share-pending";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,14 +14,23 @@ type PageProps = { params: Promise<{ id: string }> };
 async function loadStrip(id: string) {
   if (!isShareId(id)) return { status: "invalid" as const };
   const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return { status: "unconfigured" as const };
-  try {
-    const result = await loadLiveStrip(id, token);
-    if (result.status !== "ok") return { status: result.status };
-    return { status: "ok" as const, fileName: result.meta.fileName, expiresAt: result.meta.expiresAt };
-  } catch {
-    return { status: "unavailable" as const };
+  if (token) {
+    try {
+      const result = await loadLiveStrip(id, token);
+      if (result.status === "ok") {
+        return { status: "ok" as const, fileName: result.meta.fileName, expiresAt: result.meta.expiresAt };
+      }
+      if (result.status !== "unavailable") return { status: result.status };
+    } catch {
+      // Fall through to memory.
+    }
   }
+  const memory = readMemoryStrip(id);
+  if (memory.status === "ok") {
+    return { status: "ok" as const, fileName: memory.meta.fileName, expiresAt: memory.meta.expiresAt };
+  }
+  if (memory.status === "expired") return { status: "expired" as const };
+  return { status: token ? "unavailable" as const : "unconfigured" as const };
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -54,8 +65,8 @@ export default async function SharePage({ params }: PageProps) {
         )}
         {result.status === "invalid" && <ShareState title="This link is not valid." body="The address does not match a KixClicks photo strip." />}
         {result.status === "expired" && <ShareState title="This strip has expired." body="Shared photo strips are kept for 7 days, then the link stops working." />}
-        {result.status === "unavailable" && <ShareState title="This strip is unavailable." body="It may have been removed, or the upload never finished." />}
-        {result.status === "unconfigured" && <ShareState title="Sharing is not configured." body="The booth still works locally, but Vercel Blob has not been connected yet." />}
+        {result.status === "unavailable" && <SharePending id={id} />}
+        {result.status === "unconfigured" && <SharePending id={id} />}
       </section>
     </main>
   );

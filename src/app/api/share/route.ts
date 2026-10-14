@@ -1,16 +1,19 @@
 import { put } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
+import { pruneMemoryStrips, saveMemoryStrip } from "@/lib/memory-store";
 import {
   ALLOWED_SHARE_TYPES,
   MAX_SHARE_BYTES,
   SHARE_TTL_MS,
   blobPathForMeta,
   blobPathForStrip,
+  isShareId,
   type StripMeta,
 } from "@/lib/share-id";
 import { publicSiteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 function errorResponse(status: number, error: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error, ...extra }, { status });
@@ -18,14 +21,6 @@ function errorResponse(status: number, error: string, extra?: Record<string, unk
 
 export async function POST(request: NextRequest) {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    return errorResponse(
-      503,
-      "Photo sharing is not configured. Add BLOB_READ_WRITE_TOKEN from a Vercel Blob store, then redeploy.",
-      { code: "storage_unconfigured" },
-    );
-  }
-
   const origin = publicSiteOrigin(request);
 
   let form: FormData;
@@ -46,7 +41,9 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, "That image is too large to share. Try saving a JPEG, or keep the strip under 4.5 MB.");
   }
 
-  const id = crypto.randomUUID();
+  const requestedId = form.get("id");
+  const id =
+    typeof requestedId === "string" && isShareId(requestedId) ? requestedId : crypto.randomUUID();
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + SHARE_TTL_MS);
   const contentType = file.type === "image/jpeg" ? "image/jpeg" : "image/png";
@@ -60,24 +57,38 @@ export async function POST(request: NextRequest) {
     fileName,
   };
 
-  try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await put(blobPathForStrip(id), buffer, {
-      access: "public",
-      token,
-      addRandomSuffix: false,
-      contentType,
-      cacheControlMaxAge: Math.round(SHARE_TTL_MS / 1000),
-    });
-    await put(blobPathForMeta(id), JSON.stringify(meta), {
-      access: "public",
-      token,
-      addRandomSuffix: false,
-      contentType: "application/json",
-      cacheControlMaxAge: Math.round(SHARE_TTL_MS / 1000),
-    });
-  } catch {
-    return errorResponse(500, "The photo strip could not be uploaded. Try again in a moment.");
+  const buffer = Buffer.from(await file.arrayBuffer());
+  pruneMemoryStrips();
+  saveMemoryStrip(id, buffer, meta);
+
+  if (token) {
+    try {
+      const blobWrite = Promise.all([
+        put(blobPathForStrip(id), buffer, {
+          access: "public",
+          token,
+          addRandomSuffix: false,
+          contentType,
+          cacheControlMaxAge: Math.round(SHARE_TTL_MS / 1000),
+        }),
+        put(blobPathForMeta(id), JSON.stringify(meta), {
+          access: "public",
+          token,
+          addRandomSuffix: false,
+          contentType: "application/json",
+          cacheControlMaxAge: Math.round(SHARE_TTL_MS / 1000),
+        }),
+      ]);
+      blobWrite.catch(() => undefined);
+      await Promise.race([
+        blobWrite,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("blob-timeout")), 12000);
+        }),
+      ]);
+    } catch {
+      // Keep the in-memory copy so a QR can still be shown.
+    }
   }
 
   const sharePath = `/s/${id}`;
