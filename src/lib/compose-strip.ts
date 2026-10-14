@@ -1,3 +1,5 @@
+import { datedStripFileName } from "./strip-file-name";
+
 export type ComposeLayout = "four" | "three" | "double" | "grid" | "single" | "horizontal";
 export type ComposeFilter = "original" | "mono" | "sepia" | "warm" | "vintage";
 export type ComposeTheme = { color: string; paper: string; ink: string };
@@ -149,7 +151,7 @@ export async function composePhotoStrip(input: ComposeStripInput): Promise<Compo
     mimeType,
     width,
     height,
-    fileName: `kixclicks-photo-strip.${format === "png" ? "png" : "jpg"}`,
+    fileName: datedStripFileName(format),
   };
 }
 

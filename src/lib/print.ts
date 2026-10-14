@@ -9,12 +9,44 @@ export type PrinterStatus = {
   detail: string;
 };
 
+export type PaperPreset = "fit" | "photo" | "letter" | "thermal-54" | "thermal-80";
+
 export type PrintJob = {
   imageUrl: string;
   copies: number;
   paperWidthMm: number;
   grayscale: boolean;
+  paperPreset?: PaperPreset;
 };
+
+export const PAPER_PRESETS: { id: PaperPreset; label: string; widthMm: number }[] = [
+  { id: "fit", label: "Fit page", widthMm: 0 },
+  { id: "photo", label: "4×6 in", widthMm: 102 },
+  { id: "letter", label: "Letter", widthMm: 216 },
+  { id: "thermal-54", label: "54 mm", widthMm: 54 },
+  { id: "thermal-80", label: "80 mm", widthMm: 80 },
+];
+
+function pageRule(preset: PaperPreset) {
+  if (preset === "photo") return "@page { size: 4in 6in; margin: 5mm; }";
+  if (preset === "letter") return "@page { size: letter portrait; margin: 12mm; }";
+  if (preset === "thermal-54") return "@page { size: 54mm auto; margin: 2mm; }";
+  if (preset === "thermal-80") return "@page { size: 80mm auto; margin: 3mm; }";
+  return "@page { size: auto; margin: 10mm; }";
+}
+
+async function asPrintableSrc(imageUrl: string) {
+  if (imageUrl.startsWith("data:")) return imageUrl;
+  const response = await fetch(imageUrl);
+  if (!response.ok) throw new Error("The print image could not be read.");
+  const blob = await response.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("The print image could not be prepared."));
+    reader.readAsDataURL(blob);
+  });
+}
 
 export interface PrinterAdapter {
   id: PrintMethod;
@@ -51,7 +83,21 @@ export const browserPrintAdapter: PrinterAdapter = {
   async print(job) {
     const copies = validatePrintCopies(job.copies);
     if (!copies.ok) return { submitted: false, message: copies.error };
+    if (typeof window.print !== "function") {
+      return {
+        submitted: false,
+        message: "This browser does not provide a print dialog. Download the strip and print it from another device, or from your phone’s Share / Print menu.",
+      };
+    }
 
+    let src: string;
+    try {
+      src = await asPrintableSrc(job.imageUrl);
+    } catch (error) {
+      return { submitted: false, message: error instanceof Error ? error.message : "The print image could not be prepared." };
+    }
+
+    const preset = job.paperPreset ?? "fit";
     const frame = document.createElement("iframe");
     frame.setAttribute("aria-hidden", "true");
     frame.style.position = "fixed";
@@ -68,16 +114,27 @@ export const browserPrintAdapter: PrinterAdapter = {
       return { submitted: false, message: "The print frame could not be created." };
     }
 
+    const pages = Array.from({ length: copies.copies }, (_, index) =>
+      `<div class="print-copy"><img ${index === 0 ? 'id="strip" ' : ""}alt="KixClicks photo strip" /></div>`,
+    ).join("");
+
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><title>KixClicks print</title>
 <style>
-  @page { size: auto; margin: 8mm; }
+  ${pageRule(preset)}
   html, body { margin: 0; padding: 0; background: #fff; }
-  body { display: flex; justify-content: center; align-items: start; }
-  img { max-width: 100%; height: auto; display: block; }
-</style></head><body>
-  <img id="strip" alt="KixClicks photo strip" src="${job.imageUrl}" />
-</body></html>`);
+  body { margin: 0; }
+  .print-copy { page-break-after: always; display: flex; justify-content: center; align-items: flex-start; }
+  .print-copy:last-child { page-break-after: auto; }
+  img {
+    max-width: 100%;
+    max-height: calc(100vh - 16mm);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+  }
+</style></head><body>${pages}</body></html>`);
     doc.close();
 
     const image = doc.getElementById("strip");
@@ -87,7 +144,10 @@ export const browserPrintAdapter: PrinterAdapter = {
     }
 
     try {
+      for (const item of Array.from(doc.images)) item.src = src;
       await waitForImage(image);
+      const extras = Array.from(doc.images).filter((item) => item !== image);
+      await Promise.all(extras.map((item) => waitForImage(item).catch(() => undefined)));
       await new Promise<void>((resolve) => {
         const finish = () => {
           window.removeEventListener("focus", finish);
@@ -101,7 +161,7 @@ export const browserPrintAdapter: PrinterAdapter = {
       });
       return {
         submitted: true,
-        message: `Print dialog opened. Confirm ${copies.copies} cop${copies.copies === 1 ? "y" : "ies"} in the system dialog if your printer supports it. Opening the dialog does not confirm that paper was printed.`,
+        message: `Print dialog opened for ${copies.copies} cop${copies.copies === 1 ? "y" : "ies"}. Choose a printer in the browser dialog. Websites cannot print silently, and opening the dialog does not confirm that paper came out.`,
       };
     } catch (error) {
       frame.remove();

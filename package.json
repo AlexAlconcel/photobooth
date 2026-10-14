@@ -7,19 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/copies.test.mjs src/lib/blob-auth.test.mjs src/lib/cleanup-expired-shares.test.mjs"
+    "test": "node --experimental-strip-types --test src/lib/copies.test.mjs src/lib/strip-file-name.test.mjs"
   },
   "dependencies": {
-    "@vercel/blob": "^2.0.0",
     "next": "16.4.0",
-    "qrcode": "^1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
-    "@types/qrcode": "^1.5.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

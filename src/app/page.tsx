@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { PrintDialog } from "@/components/PrintDialog";
-import { ShareQr, clientShareOrigin } from "@/components/ShareQr";
 import { composePhotoStrip, filterCss } from "@/lib/compose-strip";
-import { SHARE_TTL_MS } from "@/lib/share-id";
+import { datedStripFileName } from "@/lib/strip-file-name";
 
 const POSE_BREAK_MS = 5000;
 const FLASH_MS = 280;
@@ -193,13 +192,9 @@ export default function Home() {
   const [stripPreviewUrl, setStripPreviewUrl] = useState("");
   const stripBlobRef = useRef<Blob | null>(null);
   const [stripFileName, setStripFileName] = useState("kixclicks-photo-strip.png");
-  const [shareUrl, setShareUrl] = useState("");
-  const [shareQrDataUrl, setShareQrDataUrl] = useState("");
-  const [shareExpiresAt, setShareExpiresAt] = useState("");
-  const [shareError, setShareError] = useState("");
-  const [shareBusy, setShareBusy] = useState(false);
+  const [stripBusy, setStripBusy] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
-  const [copyStatus, setCopyStatus] = useState("");
+  const [downloadStatus, setDownloadStatus] = useState("");
   const [exportError, setExportError] = useState("");
 
   const selectedLayout = layouts.find((item) => item.id === layout) ?? layouts[0];
@@ -360,13 +355,9 @@ export default function Home() {
       if (current) URL.revokeObjectURL(current);
       return "";
     });
-    setShareUrl("");
-    setShareQrDataUrl("");
-    setShareExpiresAt("");
-    setShareError("");
-    setShareBusy(false);
+    setStripBusy(false);
     setPrintOpen(false);
-    setCopyStatus("");
+    setDownloadStatus("");
     setExportError("");
     setIsCapturing(false);
     setCaptureOverlay(null);
@@ -417,7 +408,7 @@ export default function Home() {
       const composed = await buildCurrentStrip(format);
       blob = composed.blob;
       mimeType = composed.mimeType;
-      fileName = `kixclicks-${Date.now()}.${format === "png" ? "png" : "jpg"}`;
+      fileName = composed.fileName || datedStripFileName(format);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : "The photo strip could not be exported.");
       return;
@@ -431,19 +422,14 @@ export default function Home() {
 
     const result = await savePhotoStripDesktop(blob, fileName, mimeType);
     if (result === "cancelled") return;
+    setDownloadStatus("Download started. Check your Downloads folder or the save location you chose.");
   }
 
   async function finishSession() {
-    setShareError("");
-    setShareBusy(true);
-    setShareUrl("");
-    setShareQrDataUrl("");
-    setShareExpiresAt("");
+    setExportError("");
+    setDownloadStatus("");
+    setStripBusy(true);
     setStage("result");
-    const origin = clientShareOrigin();
-    const shareId = crypto.randomUUID();
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 20000);
     try {
       const composed = await buildCurrentStrip("png");
       stripBlobRef.current = composed.blob;
@@ -452,79 +438,29 @@ export default function Home() {
         if (current) URL.revokeObjectURL(current);
         return URL.createObjectURL(composed.blob);
       });
-
-      const shareBlob =
-        composed.blob.size > 1_800_000 ? (await buildCurrentStrip("jpeg")).blob : composed.blob;
-      const body = new FormData();
-      body.set("id", shareId);
-      body.set("file", shareBlob, shareBlob.type === "image/jpeg" ? "kixclicks-photo-strip.jpg" : composed.fileName);
-      const response = await fetch("/api/share", { method: "POST", body, signal: controller.signal });
-      let payload: {
-        ok?: boolean;
-        stored?: boolean;
-        error?: string;
-        id?: string;
-        shareUrl?: string;
-        sharePath?: string;
-        expiresAt?: string;
-        blobUrl?: string;
-        qrDataUrl?: string;
-      };
-      try {
-        payload = await response.json();
-      } catch {
-        setShareError("The sharing service did not respond. Download and print still work on this device.");
-        return;
-      }
-      if (!response.ok || !payload.ok || !payload.id || payload.stored === false) {
-        setShareError(payload.error || "The photo strip could not be uploaded for QR sharing.");
-        return;
-      }
-      const resolvedUrl =
-        payload.shareUrl ||
-        (payload.id && origin ? `${origin}/s/${payload.id}` : "");
-      if (!resolvedUrl) {
-        setShareError("Set NEXT_PUBLIC_SITE_URL so phones can open the QR link. Download and print still work here.");
-        return;
-      }
-      if (!payload.qrDataUrl) {
-        setShareError("The strip was saved but the QR image could not be loaded. Tap Try again.");
-        return;
-      }
-      setShareUrl(resolvedUrl);
-      setShareQrDataUrl(payload.qrDataUrl);
-      setShareExpiresAt(payload.expiresAt || new Date(Date.now() + SHARE_TTL_MS).toISOString());
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        setShareError("Sharing took too long. Check your connection, then tap Try again.");
-      } else {
-        setShareError(error instanceof Error ? error.message : "The photo strip could not be prepared.");
-      }
+      setExportError(error instanceof Error ? error.message : "The photo strip could not be prepared.");
     } finally {
-      window.clearTimeout(timeout);
-      setShareBusy(false);
-    }
-  }
-
-  async function copyShareLink() {
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopyStatus("Link copied.");
-    } catch {
-      setCopyStatus("Copy failed. Select the link manually.");
+      setStripBusy(false);
     }
   }
 
   async function downloadFinishedStrip() {
     const blob = stripBlobRef.current;
-    if (!blob) return;
+    if (!blob || stripBusy) {
+      setDownloadStatus("Wait until the photo strip is ready, then try again.");
+      return;
+    }
+    setDownloadStatus("");
+    setExportError("");
     if (isMobileExportTarget()) {
       pendingExportRef.current = { blob, fileName: stripFileName, mimeType: blob.type || "image/png" };
       setExportPreview({ url: URL.createObjectURL(blob), fileName: stripFileName });
       return;
     }
-    await savePhotoStripDesktop(blob, stripFileName, blob.type || "image/png");
+    const result = await savePhotoStripDesktop(blob, stripFileName, blob.type || "image/png");
+    if (result === "cancelled") return;
+    setDownloadStatus("Download started. Check your Downloads folder or the save location you chose.");
   }
 
   /** Must run from a button tap — phones require a fresh user gesture to open Gallery/Photos. */
@@ -539,6 +475,7 @@ export default function Home() {
 
     const shareResult = await tryShareToGallery(file);
     if (shareResult === "shared") {
+      setDownloadStatus("Share sheet opened. Choose Save to Photos or Save image to keep the strip on this device.");
       closeExportPreview();
       return;
     }
@@ -546,12 +483,14 @@ export default function Home() {
 
     const pickerResult = await trySaveToPicturesFolder(pending.blob, pending.fileName, pending.mimeType);
     if (pickerResult === "saved") {
+      setDownloadStatus("The photo strip was saved to the location you chose.");
       closeExportPreview();
       return;
     }
     if (pickerResult === "cancelled") return;
 
     triggerBrowserDownload(pending.blob, pending.fileName);
+    setDownloadStatus("Download started. If nothing appears, press and hold the image on the result screen and choose Save image.");
   }
 
   function closeExportPreview() {
@@ -588,7 +527,7 @@ export default function Home() {
     {exportPreview && <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" onClick={closeExportPreview}><div className="export-modal-card" onClick={(event) => event.stopPropagation()}><p id="export-modal-title" className="export-modal-title">Save to your gallery</p><p className="export-modal-hint">{isIosSave ? <>Tap <strong>Save to Gallery</strong> below. Your iPhone will open the share menu — choose <strong>Save to Photos</strong> or <strong>Add to Photos</strong>. That is how iOS lets websites save into your library.</> : <>Tap <strong>Save to Gallery</strong> below. Your phone will open a system menu — pick <strong>Photos</strong>, <strong>Gallery</strong>, or <strong>Save to device</strong> and allow access if asked.</>}</p><img src={exportPreview.url} alt="Your photo strip" className="export-modal-image" /><div className="export-modal-actions"><button type="button" className="primary-button full" onClick={saveMobileToGallery}>Save to Gallery</button><button type="button" className="secondary-button full" onClick={closeExportPreview}>Not now</button></div><p className="export-modal-alt">{isIosSave ? "Tip: you can also press and hold the image, then tap Save to Photos." : "If no menu appears, try Chrome and tap Save to Gallery again."}</p></div></div>}
     <header className="topbar"><button className="wordmark" onClick={() => setStage("welcome")} aria-label="Return to welcome"><span className="wordmark-lockup"><span className="wordmark-kix">Kix<BrandFlower className="wordmark-flower" /></span><span className="wordmark-clicks">Clicks</span></span><small>PHOTOBOOTH</small></button><div className="step-info"><span className="step-label">{stage === "welcome" ? "01 / welcome" : stage === "setup" ? "02 / setup" : stage === "capture" ? "03 / capture" : stage === "result" ? "05 / save" : "04 / edit"}</span><span className="step-subtitle">Same moments, better frames</span></div></header>
 
-    {stage === "welcome" && <section className="welcome page-enter"><div className="welcome-copy"><p className="eyebrow">Same moments, better frames</p><button className="primary-button welcome-cta" onClick={() => setStage("setup")}>Start <span><BrandFlower className="welcome-cta-flower" /></span></button><h1>Capture little<br /><em>moments.</em></h1><p className="intro">KixClicks is a playful photobooth for the people you like most. Take a few frames, dress them in blush and wine, and keep the whole thing local.</p><p className="microcopy">No account · camera stays on this device until you share</p></div><div className="sample-stage"><div className="sample-carousel"><div className="sample-track" style={{ transform: `translateX(-${sampleIndex * 100}%)` }}>{sampleFormats.map((format) => <div className={`sample-slide sample-format-${format.id}`} key={format.id}><div className="sample-strip">{Array.from({ length: format.count }).map((_, index) => <div className={`sample-image sample-${(index % 3) + 1}`} key={index}><span>{String(index + 1).padStart(2, "0")}</span></div>)}<p>kixclicks / 2026</p></div><span className="strip-name">{format.name}</span></div>)}</div><div className="carousel-controls"><button aria-label="Previous photo strip" onClick={() => setSampleIndex((sampleIndex + sampleFormats.length - 1) % sampleFormats.length)}>←</button><div className="carousel-dots">{sampleFormats.map((format, index) => <button aria-label={`Show ${format.name} photo strip`} className={sampleIndex === index ? "active" : ""} key={format.id} onClick={() => setSampleIndex(index)} />)}</div><button aria-label="Next photo strip" onClick={() => setSampleIndex((sampleIndex + 1) % sampleFormats.length)}>→</button></div></div><div className="orbit-note note-one">capture<br />little moments</div><div className="orbit-note note-two">✿ 100% local</div></div></section>}
+    {stage === "welcome" && <section className="welcome page-enter"><div className="welcome-copy"><p className="eyebrow">Same moments, better frames</p><button className="primary-button welcome-cta" onClick={() => setStage("setup")}>Start <span><BrandFlower className="welcome-cta-flower" /></span></button><h1>Capture little<br /><em>moments.</em></h1><p className="intro">KixClicks is a playful photobooth for the people you like most. Take a few frames, dress them in blush and wine, and keep the whole thing local.</p><p className="microcopy">No account · photos stay on this device</p></div><div className="sample-stage"><div className="sample-carousel"><div className="sample-track" style={{ transform: `translateX(-${sampleIndex * 100}%)` }}>{sampleFormats.map((format) => <div className={`sample-slide sample-format-${format.id}`} key={format.id}><div className="sample-strip">{Array.from({ length: format.count }).map((_, index) => <div className={`sample-image sample-${(index % 3) + 1}`} key={index}><span>{String(index + 1).padStart(2, "0")}</span></div>)}<p>kixclicks / 2026</p></div><span className="strip-name">{format.name}</span></div>)}</div><div className="carousel-controls"><button aria-label="Previous photo strip" onClick={() => setSampleIndex((sampleIndex + sampleFormats.length - 1) % sampleFormats.length)}>←</button><div className="carousel-dots">{sampleFormats.map((format, index) => <button aria-label={`Show ${format.name} photo strip`} className={sampleIndex === index ? "active" : ""} key={format.id} onClick={() => setSampleIndex(index)} />)}</div><button aria-label="Next photo strip" onClick={() => setSampleIndex((sampleIndex + 1) % sampleFormats.length)}>→</button></div></div><div className="orbit-note note-one">capture<br />little moments</div><div className="orbit-note note-two">✿ 100% local</div></div></section>}
 
     {stage === "setup" && <section className="workspace page-enter"><div className="section-heading"><p className="eyebrow">Before the click</p><h2>Set the mood.</h2><p>Choose a format, then we&apos;ll take care of the rest.</p></div><div className="setup-grid"><div className="control-card"><label className="control-label">01 / Layout</label><div className="layout-options">{layouts.map((item) => <button className={`layout-option ${layout === item.id ? "selected" : ""}`} key={item.id} onClick={() => setLayout(item.id)}><span className={`layout-thumb ${item.shape}`}>{Array.from({ length: Math.min(item.count, 8) }).map((_, i) => <i key={i} />)}</span><strong>{item.name}</strong><small>{item.count} {item.count === 1 ? "photo" : "photos"}</small></button>)}</div></div><div className="control-card setup-side"><label className="control-label">02 / Countdown</label><div className="segmented">{[3, 5, 10].map((value) => <button key={value} className={countdown === value ? "selected" : ""} onClick={() => { setCountdown(value); countdownRef.current = value; }}>{value}s</button>)}</div><label className="control-label spaced">03 / Camera note</label><p className="soft-note">Your browser will ask for camera permission when you begin. Nothing leaves this device.</p><button className="primary-button full" onClick={startCamera}>Open camera <span>↗</span></button></div></div><button className="text-button" onClick={() => setStage("welcome")}>← back to home page</button></section>}
 
@@ -598,8 +537,8 @@ export default function Home() {
           setRetakeIndex(i);
         }} disabled={isCapturing || photos[i] === undefined} aria-label={`Retake photo ${i + 1}`}>{photos[i] ? <img src={photos[i]} alt="" /> : <span>{i + 1}</span>}</button>)}</div></div>{captureComplete && <div className="capture-complete-banner" ref={captureCompleteBannerRef} role="status"><strong>Capture complete</strong><p>Select a photo to retake, or edit your photo strip when you&apos;re ready.</p></div>}<p className="capture-controls-hint">{isCapturing ? "capturing your strip" : captureComplete && retakeIndex === null ? "your strip is ready — retake or edit below" : retakeIndex !== null ? "tap the shutter on the camera to retake the selected photo" : `tap the shutter to start — ${countdown}s pose prep, then ${countdown}s countdown`}</p>{(photos.length > 0 || captureComplete) && <button className={captureComplete ? "primary-button capture-edit-cta" : "secondary-button"} onClick={beginEditing}>{captureComplete || photos.length >= needed ? "Edit my photo strip" : "Edit what I have"} ↗</button>}</div></div></section>}
 
-    {stage === "edit" && <section className="editor page-enter"><div className="editor-heading"><div><p className="eyebrow">Your KixClicks strip</p><h2>Make it yours.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>new session</button></div></div><div className="editor-grid"><div className="preview-column"><div className={`strip-preview layout-${layout}`} style={{ background: selectedTheme.paper, color: selectedTheme.ink, borderColor: selectedTheme.color }}>{Array.from({ length: needed }).map((_, i) => photos[i] ? <img key={i} src={photos[i]} alt={`Captured photo ${i + 1}`} style={{ filter: filterCss[filter] }} /> : <Placeholder key={i} index={i} filter={filter} />)}<div className="preview-footer"><span>{caption}</span>{showDate && <small>{new Date().toLocaleDateString("en-GB").replaceAll("/", ".")}</small>}</div>{stickers.map((sticker) => <button className="placed-sticker" style={{ left: `${sticker.x}%`, top: `${sticker.y}%` }} key={sticker.id} onClick={() => setStickers((current) => current.filter((item) => item.id !== sticker.id))}>{sticker.mark}</button>)}</div><p className="preview-hint">Click a sticker on the preview to remove it.</p></div><div className="editor-panel"><div className="tabs">{(["frame", "type"] as const).map((tab) => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>{activeTab === "frame" && <div className="panel-content"><label className="control-label">Theme</label><div className="theme-grid">{themes.map((item) => <button className={`theme-swatch ${theme === item.id ? "selected" : ""}`} key={item.id} onClick={() => setTheme(item.id)}><span style={{ background: item.paper, borderColor: item.color }} /><small>{item.name}</small></button>)}</div><label className="control-label spaced">Photo filter</label><div className="filter-row">{(Object.keys(filterCss) as Filter[]).map((item) => <button className={filter === item ? "selected" : ""} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div></div>}{activeTab === "type" && <div className="panel-content"><label className="control-label" htmlFor="caption">Caption (max 26 characters)</label><input id="caption" value={caption} maxLength={26} onChange={(event) => setCaption(event.target.value)} placeholder="a tiny caption" /><div className="toggle-row"><span>Show date stamp</span><button className={`toggle ${showDate ? "on" : ""}`} onClick={() => setShowDate(!showDate)} aria-label="Toggle date stamp"><i /></button></div><label className="control-label spaced">Quick captions</label><div className="quick-captions">{["good vibes only", "same moments", "better frames", "kixclicks"].map((text) => <button key={text} onClick={() => setCaption(text)}>{text}</button>)}</div></div>}<div className="export-area"><button className="primary-button full" onClick={finishSession}>QR, download & print <span>↗</span></button><button className="secondary-button full" onClick={() => exportImage("png")}>{isMobileSave ? "Save to Gallery (PNG)" : "Download PNG"}</button><button className="download-link" onClick={() => exportImage("jpeg")}>{isMobileSave ? "or save as JPEG to Gallery" : "or save as JPEG"}</button>{exportError && <p className="soft-note" role="alert">{exportError}</p>}</div></div></div><canvas ref={canvasRef} className="hidden-canvas" /></section>}
+    {stage === "edit" && <section className="editor page-enter"><div className="editor-heading"><div><p className="eyebrow">Your KixClicks strip</p><h2>Make it yours.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>new session</button></div></div><div className="editor-grid"><div className="preview-column"><div className={`strip-preview layout-${layout}`} style={{ background: selectedTheme.paper, color: selectedTheme.ink, borderColor: selectedTheme.color }}>{Array.from({ length: needed }).map((_, i) => photos[i] ? <img key={i} src={photos[i]} alt={`Captured photo ${i + 1}`} style={{ filter: filterCss[filter] }} /> : <Placeholder key={i} index={i} filter={filter} />)}<div className="preview-footer"><span>{caption}</span>{showDate && <small>{new Date().toLocaleDateString("en-GB").replaceAll("/", ".")}</small>}</div>{stickers.map((sticker) => <button className="placed-sticker" style={{ left: `${sticker.x}%`, top: `${sticker.y}%` }} key={sticker.id} onClick={() => setStickers((current) => current.filter((item) => item.id !== sticker.id))}>{sticker.mark}</button>)}</div><p className="preview-hint">Click a sticker on the preview to remove it.</p></div><div className="editor-panel"><div className="tabs">{(["frame", "type"] as const).map((tab) => <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>{tab}</button>)}</div>{activeTab === "frame" && <div className="panel-content"><label className="control-label">Theme</label><div className="theme-grid">{themes.map((item) => <button className={`theme-swatch ${theme === item.id ? "selected" : ""}`} key={item.id} onClick={() => setTheme(item.id)}><span style={{ background: item.paper, borderColor: item.color }} /><small>{item.name}</small></button>)}</div><label className="control-label spaced">Photo filter</label><div className="filter-row">{(Object.keys(filterCss) as Filter[]).map((item) => <button className={filter === item ? "selected" : ""} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div></div>}{activeTab === "type" && <div className="panel-content"><label className="control-label" htmlFor="caption">Caption (max 26 characters)</label><input id="caption" value={caption} maxLength={26} onChange={(event) => setCaption(event.target.value)} placeholder="a tiny caption" /><div className="toggle-row"><span>Show date stamp</span><button className={`toggle ${showDate ? "on" : ""}`} onClick={() => setShowDate(!showDate)} aria-label="Toggle date stamp"><i /></button></div><label className="control-label spaced">Quick captions</label><div className="quick-captions">{["good vibes only", "same moments", "better frames", "kixclicks"].map((text) => <button key={text} onClick={() => setCaption(text)}>{text}</button>)}</div></div>}<div className="export-area"><button className="primary-button full" onClick={finishSession}>Download & print <span>↗</span></button><button className="secondary-button full" onClick={() => exportImage("png")}>{isMobileSave ? "Save to Gallery (PNG)" : "Download PNG"}</button><button className="download-link" onClick={() => exportImage("jpeg")}>{isMobileSave ? "or save as JPEG to Gallery" : "or save as JPEG"}</button>{exportError && <p className="soft-note" role="alert">{exportError}</p>}{downloadStatus && <p className="microcopy" role="status">{downloadStatus}</p>}</div></div></div><canvas ref={canvasRef} className="hidden-canvas" /></section>}
 
-    {stage === "result" && <section className="editor result-stage page-enter"><div className="editor-heading"><div><p className="eyebrow">Session complete</p><h2>Scan, save, or print.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>Start New Session</button></div></div><div className="result-grid">{stripPreviewUrl ? <img className="result-strip" src={stripPreviewUrl} alt="Final KixClicks photo strip" /> : <p className="soft-note">Preparing your photo strip…</p>}<div className="result-panel"><div className="result-qr-wrap">{shareQrDataUrl && shareUrl ? <ShareQr url={shareUrl} dataUrl={shareQrDataUrl} /> : <div className="result-qr result-qr-wait" role="status">{shareBusy ? "Saving strip & preparing QR…" : "QR not ready"}</div>}{shareQrDataUrl && shareUrl && <><p className="result-qr-caption">Scan to save your photo strip</p><p className="microcopy">This link expires {shareExpiresAt ? new Date(shareExpiresAt).toLocaleString() : "in 7 days"}. No account is required.</p></>}</div>{shareError && <p className="soft-note" role="alert">{shareError}</p>}{shareError && <button type="button" className="secondary-button full" onClick={finishSession} disabled={shareBusy}>Try again</button>}<div className="result-actions"><button className="primary-button full" onClick={downloadFinishedStrip} disabled={!stripPreviewUrl}>Download Photo Strip</button><button className="secondary-button full" onClick={() => setPrintOpen(true)} disabled={!stripPreviewUrl}>Print Photo Strip</button><button className="secondary-button full" onClick={copyShareLink} disabled={!shareUrl}>Copy Link</button>{copyStatus && <p className="microcopy">{copyStatus}</p>}{shareUrl && <p className="share-url">{shareUrl}</p>}<button className="text-button" onClick={restart}>Start New Session</button></div></div></div></section>}
+    {stage === "result" && <section className="editor result-stage page-enter"><div className="editor-heading"><div><p className="eyebrow">Session complete</p><h2>Save or print.</h2></div><div className="editor-actions"><button className="secondary-button" onClick={restart}>Start New Session</button></div></div><div className="result-grid">{stripPreviewUrl ? <img className="result-strip" src={stripPreviewUrl} alt="Final KixClicks photo strip" /> : <p className="soft-note">{stripBusy ? "Preparing your photo strip…" : "The photo strip is not ready yet."}</p>}<div className="result-panel"><p className="result-help">{isMobileSave ? "Download keeps the finished strip on this phone. On iPhone, choose Save to Photos from the share sheet. Print uses the browser print dialog where the device provides one." : "Download saves the finished strip on this computer. Print opens your browser’s print dialog — websites cannot send jobs to a printer silently."}</p>{exportError && <p className="soft-note" role="alert">{exportError}</p>}{exportError && <button type="button" className="secondary-button full" onClick={finishSession} disabled={stripBusy}>Try again</button>}<div className="result-actions"><button className="primary-button full" onClick={downloadFinishedStrip} disabled={!stripPreviewUrl || stripBusy}>{isMobileSave ? "Download / Save to Gallery" : "Download Photo Strip"}</button><button className="secondary-button full" onClick={() => setPrintOpen(true)} disabled={!stripPreviewUrl || stripBusy}>Print Photo Strip</button>{downloadStatus && <p className="microcopy" role="status">{downloadStatus}</p>}<p className="microcopy">{stripFileName}</p><button className="text-button" onClick={restart}>Start New Session</button></div></div></div></section>}
   </main>;
 }
