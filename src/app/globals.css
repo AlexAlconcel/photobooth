@@ -45,7 +45,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .secondary-button { border-radius: 999px; }
 .download-link { border-radius: 999px; padding: 8px 14px; }
 @keyframes flash { 0% { opacity: 0; } 20% { opacity: .9; } 100% { opacity: 0; } } @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@media (max-width: 760px) { .topbar { height: auto; min-height: 68px; padding: 12px 20px; align-items: center; }.privacy { display: none; }.step-label { font-size: 9px; line-height: 1.3; }.welcome { display: block; padding: 60px 24px; }.welcome h1 { font-size: 64px; }.intro { font-size: 16px; }.sample-stage { min-height: 390px; margin-top: 25px; }.sample-strip { width: 180px; }.sample-image { height: 105px; }.setup-grid, .capture-grid, .editor-grid { grid-template-columns: 1fr; }.workspace, .capture-stage, .editor { padding: 48px 24px 60px; }.layout-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }.layout-thumb { height: 80px; }.setup-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--ink); padding-top: 17px; }.capture-top, .editor-heading { align-items: start; }.capture-top h2, .editor-heading h2 { font-size: 43px; }.editor-actions { flex-direction: column; align-items: end; gap: 7px; }.camera-wrap { min-height: 400px; aspect-ratio: auto; }.editor-grid { margin-top: 30px; }.layout-horizontal { min-width: 100%; }.theme-grid { grid-template-columns: repeat(3, 1fr); }.capture-preview-side .capture-strip-preview.layout-horizontal { width: 100% !important; max-width: 100% !important; height: auto !important; min-height: 0 !important; padding: 10px 8px 8px !important; gap: 6px 4px !important; grid-template-rows: auto auto !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }.capture-preview-side .capture-strip-preview.layout-horizontal .capture-strip-slot { height: auto !important; width: 100% !important; min-width: 0 !important; aspect-ratio: 4 / 3; } }
+@media (max-width: 760px) { .topbar { height: auto; min-height: 68px; padding: 12px 20px; align-items: center; }.privacy { display: none; }.step-label { font-size: 9px; line-height: 1.3; }.welcome { display: block; padding: 60px 24px; }.welcome h1 { font-size: 64px; }.intro { font-size: 16px; }.sample-stage { min-height: 390px; margin-top: 25px; }.sample-strip { width: 180px; }.sample-image { height: 105px; }.setup-grid, .capture-grid, .editor-grid { grid-template-columns: 1fr; }.workspace, .capture-stage, .editor { padding: 48px 24px 60px; }.layout-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }.layout-thumb { height: 80px; }.setup-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--ink); padding-top: 17px; }.capture-top, .editor-heading { align-items: start; }.capture-top h2, .editor-heading h2 { font-size: 43px; }.editor-actions { flex-direction: column; align-items: end; gap: 7px; }.camera-wrap { min-height: 400px; aspect-ratio: auto; }.editor-grid { margin-top: 30px; }.layout-horizontal { min-width: 100%; }.theme-grid { grid-template-columns: repeat(3, 1fr); }.capture-preview-side .capture-strip-preview.layout-horizontal { width: 100% !important; max-width: 100% !important; } }
 @media (min-width: 761px) and (max-width: 1024px) { .strip-preview.layout-horizontal { width: min(100%, 480px) !important; max-width: 100% !important; padding: 14px 14px 20px !important; } }
 .countdown-overlay { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; background: #201b1880; color: #fffaf4; text-align: center; }.countdown-overlay span { display: block; font: 400 clamp(100px, 16vw, 180px)/.8 Georgia, serif; letter-spacing: -.08em; text-shadow: 0 5px 25px #0005; animation: countdown-pop .9s ease both; }.countdown-overlay small { margin-top: 20px; font: 10px Arial, sans-serif; letter-spacing: .2em; text-transform: uppercase; }
 .photo-dots button { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); background: none; color: var(--muted); font: 10px Arial; }.photo-dots button.filled { background: var(--ink); color: white; }.photo-dots button:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }.capture-options { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 20px; }.option-button { border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 8px 11px; font: 10px Arial, sans-serif; letter-spacing: .06em; text-transform: uppercase; }.option-button.active { background: #e8ddd3; border-color: #cdb9aa; color: var(--ink); }.camera-wrap:fullscreen { width: 100vw; height: 100vh; aspect-ratio: auto; background: #171514; }.camera-wrap:fullscreen .camera-video { object-fit: contain; }.camera-wrap:fullscreen .camera-meta { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
@@ -56,7 +56,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .capture-preview-side .capture-strip-preview.layout-grid { width: 120px; height: 120px; aspect-ratio: 1; }.capture-preview-side .capture-strip-preview.layout-grid .capture-strip-slot { aspect-ratio: 1; }.capture-preview-side .capture-strip-preview.layout-horizontal { width: min(100%, 400px); }.capture-preview-side .capture-strip-preview.layout-horizontal .capture-strip-slot { height: auto; align-self: stretch; aspect-ratio: 4 / 3; }
 @media (min-width: 761px) {
   .capture-preview-side .capture-strip-preview.layout-grid { width: 180px !important; height: 180px !important; min-height: 180px !important; display: grid !important; grid-template-rows: repeat(2, minmax(0, 1fr)) auto !important; }.capture-preview-side .capture-strip-preview.layout-grid .capture-strip-slot { flex: none; height: auto; }
-  .capture-preview-side .capture-strip-preview.layout-horizontal { width: min(100%, 400px) !important; height: auto !important; min-height: 0 !important; display: grid !important; grid-template-rows: auto auto !important; padding: 10px 8px 8px !important; gap: 6px 4px !important; }.capture-preview-side .capture-strip-preview.layout-horizontal .capture-strip-slot { flex: none; height: auto !important; align-self: stretch; aspect-ratio: 4 / 3; }
+  .capture-preview-side .capture-strip-preview.layout-horizontal { width: min(100%, 400px) !important; }
   .capture-preview-side .capture-strip-preview.layout-grid { width: min(100%, 320px) !important; height: auto !important; aspect-ratio: 1; min-height: 0 !important; max-width: 100% !important; padding: 10px !important; row-gap: 12px !important; column-gap: 10px !important; grid-template-rows: repeat(2, minmax(0, 1fr)) 18px !important; }.capture-preview-side .capture-strip-preview.layout-grid .capture-strip-slot { height: auto !important; aspect-ratio: 1; }.capture-preview-side .capture-strip-preview.layout-grid small { line-height: 18px; }
 }
 .capture-preview-side .capture-strip-preview.layout-grid .capture-strip-slot { border: 6px solid #fbf9f5 !important; box-sizing: border-box; }
@@ -296,16 +296,9 @@ button.shutter > span::after { background: #2f2b28 !important; }
   .capture-preview-side .capture-strip-preview.layout-horizontal {
     width: 100% !important;
     max-width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
-    padding: 10px 8px 8px !important;
-    gap: 6px 4px !important;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    grid-template-rows: auto auto !important;
-    align-content: start;
   }
 
-  .capture-preview-side .capture-strip-preview.layout-horizontal .capture-strip-slot {
+  .capture-preview-side .capture-strip-preview.layout-horizontal .capture-horizontal-photos .capture-strip-slot {
     height: auto !important;
     min-height: 0 !important;
     aspect-ratio: 4 / 3;
@@ -435,18 +428,9 @@ button.shutter > span::after { background: #2f2b28 !important; }
   .capture-preview-side .capture-strip-preview.layout-horizontal {
     width: 100% !important;
     max-width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
-    display: grid !important;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-    grid-template-rows: auto auto !important;
-    padding: 10px 8px 8px !important;
-    gap: 6px 4px !important;
-    box-sizing: border-box !important;
-    align-content: start;
   }
 
-  .capture-preview-side .capture-strip-preview.layout-horizontal .capture-strip-slot {
+  .capture-preview-side .capture-strip-preview.layout-horizontal .capture-horizontal-photos .capture-strip-slot {
     width: 100% !important;
     min-width: 0 !important;
     height: auto !important;
@@ -800,25 +784,40 @@ button.shutter > span::after { background: #2f2b28 !important; }
   }
 }
 
-/* Side-by-side capture preview — room above photos inside the frame */
+/* Side-by-side capture preview — flex frame + inner photo grid (reliable top inset) */
 .capture-preview-side .capture-strip-preview.layout-horizontal {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
   height: auto !important;
   min-height: 0 !important;
   max-height: none !important;
   overflow: visible !important;
-  padding: 10px 8px 8px !important;
-  grid-template-rows: auto auto !important;
-  gap: 6px 4px !important;
-  align-content: start;
+  box-sizing: border-box !important;
+  padding: 12px 10px 10px !important;
+  gap: 8px !important;
 }
 
-.capture-preview-side .capture-strip-preview.layout-horizontal .capture-strip-slot {
+.capture-preview-side .capture-strip-preview.layout-horizontal .capture-horizontal-photos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.capture-preview-side .capture-strip-preview.layout-horizontal .capture-horizontal-photos .capture-strip-slot {
+  width: 100% !important;
   height: auto !important;
   min-height: 0 !important;
+  flex: none !important;
   aspect-ratio: 4 / 3;
 }
 
 .capture-preview-side .capture-strip-preview.layout-horizontal small {
-  margin-top: 2px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding-top: 2px;
   line-height: 1.2;
+  text-align: center;
 }
