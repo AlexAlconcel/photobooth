@@ -20,6 +20,12 @@ type LayoutId = "four" | "three" | "double" | "grid" | "single" | "horizontal";
 type ThemeId = "minimal" | "rose" | "cream" | "film" | "ink" | "beige" | "friends" | "red";
 type Sticker = { id: number; mark: string; x: number; y: number };
 
+const DEFAULT_LAYOUT: LayoutId = "four";
+const DEFAULT_THEME: ThemeId = "minimal";
+const DEFAULT_FILTER: Filter = "original";
+const DEFAULT_CAPTION = "made with friends";
+const DEFAULT_COUNTDOWN = 3;
+
 const layouts: { id: LayoutId; name: string; count: number; shape: string }[] = [
   { id: "four", name: "Four cut", count: 4, shape: "strip" },
   { id: "three", name: "Three cut", count: 3, shape: "strip short" },
@@ -143,15 +149,15 @@ async function savePhotoStripDesktop(blob: Blob, fileName: string, mimeType: str
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("welcome");
-  const [layout, setLayout] = useState<LayoutId>("four");
-  const [theme, setTheme] = useState<ThemeId>("minimal");
-  const [filter, setFilter] = useState<Filter>("original");
+  const [layout, setLayout] = useState<LayoutId>(DEFAULT_LAYOUT);
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
+  const [filter, setFilter] = useState<Filter>(DEFAULT_FILTER);
   const [photos, setPhotos] = useState<string[]>([]);
-  const [caption, setCaption] = useState("made with friends");
+  const [caption, setCaption] = useState(DEFAULT_CAPTION);
   const [showDate, setShowDate] = useState(true);
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(DEFAULT_COUNTDOWN);
   const [captureOverlay, setCaptureOverlay] = useState<CaptureOverlay>(null);
-  const countdownRef = useRef(3);
+  const countdownRef = useRef(DEFAULT_COUNTDOWN);
   const [mirrorCamera, setMirrorCamera] = useState(true);
   const [retakeIndex, setRetakeIndex] = useState<number | null>(null);
   const [cameraError, setCameraError] = useState("");
@@ -311,13 +317,35 @@ export default function Home() {
   }
 
   function beginEditing() { stopCamera(); setStage("edit"); }
-  function restart() {
+
+  function resetBoothSession() {
     isCapturingRef.current = false;
+    stopCamera();
+    pendingExportRef.current = null;
+    setExportPreview((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
     setIsCapturing(false);
     setCaptureOverlay(null);
     setFlash(false);
-    stopCamera();
     setPhotos([]);
+    setRetakeIndex(null);
+    setLayout(DEFAULT_LAYOUT);
+    setTheme(DEFAULT_THEME);
+    setFilter(DEFAULT_FILTER);
+    setCaption(DEFAULT_CAPTION);
+    setShowDate(true);
+    setCountdown(DEFAULT_COUNTDOWN);
+    countdownRef.current = DEFAULT_COUNTDOWN;
+    setStickers([]);
+    setActiveTab("frame");
+    setCameraError("");
+    setMirrorCamera(true);
+  }
+
+  function restart() {
+    resetBoothSession();
     setStage("setup");
   }
   async function toggleFullscreen() { if (document.fullscreenElement) await document.exitFullscreen(); else await cameraWrapRef.current?.requestFullscreen(); }
