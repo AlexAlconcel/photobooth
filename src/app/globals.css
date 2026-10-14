@@ -1042,8 +1042,9 @@ button.shutter > span::after { background: #2f2b28 !important; }
   color: var(--ink);
 }
 .capture-strip-preview {
-  border-color: #ffd7e7;
+  border-color: #fff8e7;
   background: #fff8e7;
+  box-shadow: 8px 10px 20px rgb(80 13 32 / 8%);
 }
 .capture-complete-banner {
   background: #fff8e7;
