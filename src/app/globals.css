@@ -1113,3 +1113,111 @@ button.shutter > span::after { background: #2f2b28 !important; }
   letter-spacing: 0.12em !important;
   text-align: center;
 }
+
+.result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 42px;
+  margin-top: 36px;
+  align-items: start;
+}
+.result-strip {
+  width: min(100%, 360px);
+  height: auto;
+  display: block;
+  margin-inline: auto;
+  box-shadow: 12px 18px 28px rgb(80 13 32 / 12%);
+}
+.result-panel {
+  border-top: 1px solid var(--ink);
+  padding-top: 22px;
+}
+.result-qr {
+  display: block;
+  width: min(100%, 280px);
+  height: auto;
+  margin: 0 auto 12px;
+  background: #fff;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.result-qr-caption {
+  text-align: center;
+  font: 13px/1.4 Arial, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.result-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+.share-url {
+  margin: 0;
+  font: 12px/1.5 Arial, sans-serif;
+  color: var(--muted);
+  word-break: break-all;
+}
+.copy-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.copy-stepper input {
+  width: 72px;
+  text-align: center;
+  border: 1px solid var(--ink);
+  background: transparent;
+  padding: 10px 0;
+  color: var(--ink);
+}
+.print-method-row {
+  flex-wrap: wrap;
+}
+.print-dialog-card {
+  max-height: 92vh;
+  overflow: auto;
+}
+.share-page .share-card {
+  max-width: 560px;
+  margin: 40px auto 80px;
+  padding: 0 24px 40px;
+  text-align: center;
+}
+.share-image {
+  width: min(100%, 360px);
+  height: auto;
+  margin: 24px auto;
+  display: block;
+  box-shadow: 12px 18px 28px rgb(80 13 32 / 12%);
+}
+.share-actions {
+  display: grid;
+  gap: 10px;
+  margin: 18px auto 24px;
+  max-width: 320px;
+}
+@media (max-width: 760px) {
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media print {
+  .topbar,
+  .result-panel,
+  .editor-heading,
+  .editor-actions,
+  .export-modal,
+  .welcome,
+  .workspace,
+  .capture-stage {
+    display: none !important;
+  }
+  .result-strip,
+  .share-image {
+    box-shadow: none;
+    width: 100%;
+  }
+}
