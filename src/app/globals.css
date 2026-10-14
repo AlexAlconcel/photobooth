@@ -702,6 +702,17 @@ button.shutter > span::after { background: #2f2b28 !important; }
     box-sizing: border-box;
   }
 
+  .capture-controls .capture-complete-banner {
+    order: 3 !important;
+    margin: 4px 16px 16px !important;
+  }
+
+  .capture-controls .capture-edit-cta,
+  .capture-controls .primary-button.capture-edit-cta {
+    order: 5 !important;
+    margin: 10px 0 0 !important;
+  }
+
   .capture-controls .secondary-button {
     order: 4 !important;
     margin: 8px 0 0 !important;
@@ -900,9 +911,10 @@ button.shutter > span::after { background: #2f2b28 !important; }
 }
 
 .countdown-overlay--complete {
-  z-index: 6;
+  z-index: 7;
   padding: clamp(20px, 5vw, 32px);
-  background: rgb(20 18 17 / 72%);
+  background: rgb(20 18 17 / 78%);
+  pointer-events: none;
 }
 
 .countdown-overlay--complete .capture-complete-title {
@@ -926,12 +938,13 @@ button.shutter > span::after { background: #2f2b28 !important; }
   width: 100%;
   max-width: 22rem;
   margin: 16px auto 0;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
+  padding: 16px 18px;
+  border: 2px solid var(--accent);
   border-radius: 12px;
-  background: #f8f2eb;
+  background: #fff8f0;
   text-align: center;
   box-sizing: border-box;
+  box-shadow: 0 10px 28px rgb(121 95 80 / 14%);
 }
 
 .capture-complete-banner strong {
