@@ -48,7 +48,7 @@ After editing a strip, use **QR, download & print**.
 
 Shared strips are stored as PNG/JPEG objects with unguessable UUIDs. Links expire after **7 days**. Opening an expired link returns an expired state and attempts to delete the stored files. Camera frames stay in browser memory until a session is finished.
 
-Without Blob configured, download and print still work on the booth computer. The result screen will show a sharing error instead of a scannable QR code.
+Without Blob on Vercel, guest QR links cannot work (each request runs on a different server). Download and print still work on the booth computer; the result screen shows a clear error instead of a scannable QR.
 
 ### Local commands
 

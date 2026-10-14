@@ -1,10 +1,16 @@
 import { del, list, type ListBlobResultBlob } from "@vercel/blob";
-import { blobPathForMeta, blobPathForStrip, isExpired, type StripMeta } from "./share-id";
+import {
+  blobPathForMeta,
+  blobStripPathCandidates,
+  isExpired,
+  type StripMeta,
+} from "./share-id";
 
 export async function findStoredStrip(id: string, token: string) {
   const { blobs } = await list({ prefix: `kixclicks/${id}`, token, limit: 20 });
-  const image = blobs.find((item) => item.pathname === blobPathForStrip(id));
   const metaBlob = blobs.find((item) => item.pathname === blobPathForMeta(id));
+  const candidates = new Set(blobStripPathCandidates(id));
+  const image = blobs.find((item) => candidates.has(item.pathname));
   return { image, metaBlob };
 }
 
@@ -15,7 +21,7 @@ export async function readStoredMeta(metaBlob: ListBlobResultBlob): Promise<Stri
 }
 
 export async function deleteStoredStrip(id: string, token: string) {
-  await del([blobPathForStrip(id), blobPathForMeta(id)], { token }).catch(() => undefined);
+  await del([...blobStripPathCandidates(id), blobPathForMeta(id)], { token }).catch(() => undefined);
 }
 
 export async function loadLiveStrip(id: string, token: string) {

@@ -66,7 +66,12 @@ export default async function SharePage({ params }: PageProps) {
         {result.status === "invalid" && <ShareState title="This link is not valid." body="The address does not match a KixClicks photo strip." />}
         {result.status === "expired" && <ShareState title="This strip has expired." body="Shared photo strips are kept for 7 days, then the link stops working." />}
         {result.status === "unavailable" && <SharePending id={id} />}
-        {result.status === "unconfigured" && <SharePending id={id} />}
+        {result.status === "unconfigured" && (
+          <ShareState
+            title="This strip was not saved to the cloud."
+            body="The booth showed a QR code before cloud storage was connected. Ask the operator to add a Vercel Blob store to the project, redeploy, then start a new session on the booth."
+          />
+        )}
       </section>
     </main>
   );

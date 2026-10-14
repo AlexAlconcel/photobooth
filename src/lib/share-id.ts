@@ -8,8 +8,13 @@ export function isShareId(value: string) {
   return SHARE_ID_PATTERN.test(value);
 }
 
-export function blobPathForStrip(id: string) {
-  return `kixclicks/${id}.png`;
+export function blobPathForStrip(id: string, contentType = "image/png") {
+  const ext = contentType === "image/jpeg" ? "jpg" : "png";
+  return `kixclicks/${id}.${ext}`;
+}
+
+export function blobStripPathCandidates(id: string) {
+  return [`kixclicks/${id}.png`, `kixclicks/${id}.jpg`];
 }
 
 export function blobPathForMeta(id: string) {

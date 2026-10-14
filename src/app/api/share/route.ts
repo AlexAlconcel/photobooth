@@ -10,6 +10,7 @@ import {
   isShareId,
   type StripMeta,
 } from "@/lib/share-id";
+import { hasBlobToken, requiresBlobForShare } from "@/lib/share-storage";
 import { publicSiteOrigin } from "@/lib/site-origin";
 
 export const runtime = "nodejs";
@@ -20,8 +21,15 @@ function errorResponse(status: number, error: string, extra?: Record<string, unk
 }
 
 export async function POST(request: NextRequest) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
   const origin = publicSiteOrigin(request);
+
+  if (requiresBlobForShare() && !hasBlobToken()) {
+    return errorResponse(
+      503,
+      "Photo sharing is not set up on this site yet. In the Vercel project, create a Blob store and redeploy so BLOB_READ_WRITE_TOKEN is available.",
+    );
+  }
 
   let form: FormData;
   try {
@@ -61,10 +69,11 @@ export async function POST(request: NextRequest) {
   pruneMemoryStrips();
   saveMemoryStrip(id, buffer, meta);
 
+  let stored = false;
   if (token) {
     try {
-      const blobWrite = Promise.all([
-        put(blobPathForStrip(id), buffer, {
+      await Promise.all([
+        put(blobPathForStrip(id, contentType), buffer, {
           access: "public",
           token,
           addRandomSuffix: false,
@@ -79,16 +88,19 @@ export async function POST(request: NextRequest) {
           cacheControlMaxAge: Math.round(SHARE_TTL_MS / 1000),
         }),
       ]);
-      blobWrite.catch(() => undefined);
-      await Promise.race([
-        blobWrite,
-        new Promise((_, reject) => {
-          setTimeout(() => reject(new Error("blob-timeout")), 12000);
-        }),
-      ]);
+      stored = true;
     } catch {
-      // Keep the in-memory copy so a QR can still be shown.
+      return errorResponse(
+        500,
+        "The photo strip could not be saved to cloud storage. Check the Vercel Blob store and try again.",
+      );
     }
+  } else {
+    stored = !requiresBlobForShare();
+  }
+
+  if (!stored) {
+    return errorResponse(503, "Photo sharing storage is not available.");
   }
 
   const sharePath = `/s/${id}`;
@@ -96,6 +108,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
+    stored: true,
     id,
     sharePath,
     shareUrl,
