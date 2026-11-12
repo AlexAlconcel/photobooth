@@ -1,5 +1,7 @@
 import { MAX_COPIES, MIN_COPIES, parseCopies } from "./copies";
 
+const PRINT_BRIDGE_URL = process.env.NEXT_PUBLIC_PRINT_BRIDGE_URL || "http://127.0.0.1:4173";
+
 export type PrintMethod = "browser" | "bridge" | "direct";
 
 export type PrinterStatus = {
@@ -254,7 +256,7 @@ export const localBridgeAdapter: PrinterAdapter = {
   id: "bridge",
   async inspect() {
     try {
-      const response = await fetch("http://127.0.0.1:4173/health", { method: "GET" });
+      const response = await fetch(`${PRINT_BRIDGE_URL}/health`, { method: "GET", cache: "no-store" });
       if (!response.ok) {
         return {
           method: "bridge",
@@ -277,7 +279,7 @@ export const localBridgeAdapter: PrinterAdapter = {
         method: "bridge",
         label: "Local print bridge",
         available: false,
-        detail: "No local bridge at 127.0.0.1:4173. Run the optional print-bridge on the computer connected to the printer.",
+        detail: `No local bridge at ${PRINT_BRIDGE_URL}. Start the RP30 print bridge on this computer.`,
       };
     }
   },
@@ -285,7 +287,7 @@ export const localBridgeAdapter: PrinterAdapter = {
     const copies = validatePrintCopies(job.copies);
     if (!copies.ok) return { submitted: false, message: copies.error };
     try {
-      const response = await fetch("http://127.0.0.1:4173/print", {
+      const response = await fetch(`${PRINT_BRIDGE_URL}/print`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

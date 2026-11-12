@@ -6,6 +6,7 @@
  *   RP30_PRINTER_NAME=RP30 (Windows printer queue name, USB mode)
  *   RP30_HOST=192.168.1.50 (LAN printer address, LAN mode)
  *   RP30_PORT=9100 (LAN raw printing port)
+ *   RP30_ALLOWED_ORIGINS=https://your-app.vercel.app (comma-separated browser origins)
  *
  * Run only on the computer that is connected to the printer:
  *   node print-bridge/server.mjs
@@ -22,15 +23,24 @@ const connection = (process.env.RP30_CONNECTION || "usb").toLowerCase();
 const printerName = process.env.RP30_PRINTER_NAME || "RP30";
 const printerHost = process.env.RP30_HOST || "";
 const printerPort = Number(process.env.RP30_PORT || 9100);
+const allowedOrigins = new Set(
+  (process.env.RP30_ALLOWED_ORIGINS || "http://localhost:3000,http://127.0.0.1:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
 
-function json(response, status, payload) {
+function json(response, status, payload, requestOrigin = "") {
   const body = JSON.stringify(payload);
+  const allowedOrigin = allowedOrigins.has(requestOrigin) ? requestOrigin : "null";
   response.writeHead(status, {
     "Content-Type": "application/json",
     "Content-Length": Buffer.byteLength(body),
-    "Access-Control-Allow-Origin": "http://localhost:3000",
+    "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Private-Network": "true",
+    "Vary": "Origin",
   });
   response.end(body);
 }
@@ -159,13 +169,14 @@ async function printJob(payload) {
 }
 
 const server = http.createServer(async (request, response) => {
+  const requestOrigin = request.headers.origin || "";
   if (request.method === "OPTIONS") {
-    json(response, 204, { ok: true });
+    json(response, 204, { ok: true }, requestOrigin);
     return;
   }
   const host = request.headers.host || "";
   if (!host.startsWith("127.0.0.1") && !host.startsWith("localhost")) {
-    json(response, 403, { ok: false, message: "The print bridge only accepts local requests." });
+    json(response, 403, { ok: false, message: "The print bridge only accepts local requests." }, requestOrigin);
     return;
   }
   if (request.url === "/health" && request.method === "GET") {
@@ -173,11 +184,11 @@ const server = http.createServer(async (request, response) => {
     json(response, 200, {
       ok: configured,
       printer: configured ? `RP30 ${connection.toUpperCase()} (${connection === "usb" ? printerName : `${printerHost}:${printerPort}`})` : null,
-    });
+    }, requestOrigin);
     return;
   }
   if (request.url !== "/print" || request.method !== "POST") {
-    json(response, 404, { ok: false, message: "Unknown bridge route." });
+    json(response, 404, { ok: false, message: "Unknown bridge route." }, requestOrigin);
     return;
   }
 
@@ -186,7 +197,7 @@ const server = http.createServer(async (request, response) => {
   for await (const chunk of request) {
     size += chunk.length;
     if (size > MAX_BYTES) {
-      json(response, 413, { ok: false, message: "Print payload is too large." });
+      json(response, 413, { ok: false, message: "Print payload is too large." }, requestOrigin);
       return;
     }
     chunks.push(chunk);
@@ -194,9 +205,9 @@ const server = http.createServer(async (request, response) => {
   try {
     const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     await printJob(payload);
-    json(response, 200, { ok: true, message: `RP30 ${connection.toUpperCase()} print job sent successfully.` });
+    json(response, 200, { ok: true, message: `RP30 ${connection.toUpperCase()} print job sent successfully.` }, requestOrigin);
   } catch (error) {
-    json(response, 500, { ok: false, message: error instanceof Error ? error.message : "The RP30 print job failed." });
+    json(response, 500, { ok: false, message: error instanceof Error ? error.message : "The RP30 print job failed." }, requestOrigin);
   }
 });
 
