@@ -62,7 +62,7 @@ export function PrintDialog({ imageUrl, onClose }: Props) {
     <div className="export-modal" role="dialog" aria-modal="true" aria-labelledby="print-dialog-title" onClick={onClose}>
       <div className="export-modal-card print-dialog-card" onClick={(event) => event.stopPropagation()}>
         <p id="print-dialog-title" className="export-modal-title">Print photo strip</p>
-        <p className="export-modal-hint">Browsers cannot print silently. This opens your device’s print dialog so you can pick a printer and paper. iPhones may offer Print from the share sheet instead.</p>
+        <p className="export-modal-hint">For the RP30, run the local bridge and select Local print bridge with 80 mm paper. Browser printing remains available as a fallback.</p>
         <img src={imageUrl} alt="Print preview" className="export-modal-image" />
         <label className="control-label" htmlFor="print-method">Printing method</label>
         <div className="segmented print-method-row">

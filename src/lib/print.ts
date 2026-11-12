@@ -270,7 +270,7 @@ export const localBridgeAdapter: PrinterAdapter = {
         available: Boolean(payload.ok),
         detail: payload.printer
           ? `Bridge online for ${payload.printer}.`
-          : "Bridge online. Configure a printer adapter in print-bridge before sending jobs.",
+          : "RP30 bridge online. Select 80 mm paper, then send the job.",
       };
     } catch {
       return {
